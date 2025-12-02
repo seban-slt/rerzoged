@@ -1,0 +1,1013 @@
+; defines
+
+ZUKS_XMS_BANK	equ	[banks+1]
+ZUK_PIC_LINES	equ	150
+FADE_OUT_TIME	equ	$2c
+
+; memory map
+
+zuks_dst	equ	$1000
+zuks_data_len	equ	[2400+2400+2384+2384]
+
+; zuk_a_f0	equ	zuks_dst
+; zuk_a_f1	equ	zuks_dst+2400
+; zuk_b_f0	equ	zuks_dst+4800
+; zuk_b_f1	equ	zuks_dst+7184
+
+zuk_a_f0	equ	[zuks_dst+$a00*0]
+zuk_b_f0	equ	[zuks_dst+$a00*1]
+zuk_a_f1	equ	[zuks_dst+$a00*2]
+zuk_b_f1	equ	[zuks_dst+$a00*3]
+
+sbs_scr0	equ	$4150
+sbs_scr1	equ	$6150
+
+sbs_dl0		equ	dl0		; org	*+$200
+sbs_dl1		equ	dl1		; org	*+$200
+sc0_adr_lo	equ	free_pg0	; org	*+$100
+sc0_adr_hi	equ	free_pg1	; org	*+$100
+sc1_adr_lo	equ	free_pg2	; org	*+$100
+sc1_adr_hi	equ	free_pg3	; org	*+$100
+hi_nib_only	equ	free_pg4	; org	*+$100
+hi_nib_lsr4	equ	free_pg5	; org	*+$100
+lo_nib_only	equ	free_pg6	; org	*+$100
+lo_nib_asl4	equ	free_pg7	; org	*+$100
+dark_lut	equ	free_pg8	; org	*+$100
+
+
+sbs_st_org	equ	*		; remember origin
+
+; zero page
+		org	$40
+sbs_ad0		org	*+2
+sbs_ad1		org	*+2
+sbs_ad2		org	*+2
+sbs_ad3		org	*+2
+
+px0		org	*+1
+px1		org	*+1
+xpos		org	*+1
+
+xp		org	*+1
+yp		org	*+1
+
+scnt		org	*+1
+
+bob_dx1		org	*+1
+bob_dx2		org	*+1
+bob_dy1		org	*+1
+bob_dy2		org	*+1
+
+bob_sx1		org	*+1
+bob_sx2		org	*+1
+bob_sy1		org	*+1
+bob_sy2		org	*+1
+
+		ert	*>$80
+
+		org	[[sbs_st_org/256]+1]*256		; page align
+
+shd_sine_x	dta	sin(23,22,256)
+shd_sine_y	dta	sin(37,36,256)
+
+; mixadd (p0,p1)-> D+1 (clamped to 31)
+
+mix_add_lut	dta $01,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02
+		dta $03,$03,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04
+		dta $05,$05,$05,$06,$06,$06,$06,$06,$06,$06,$06,$06,$06,$06,$06,$06
+		dta $07,$07,$07,$07,$08,$08,$08,$08,$08,$08,$08,$08,$08,$08,$08,$08
+		dta $09,$09,$09,$09,$09,$0A,$0A,$0A,$0A,$0A,$0A,$0A,$0A,$0A,$0A,$0A
+		dta $0B,$0B,$0B,$0B,$0B,$0B,$0C,$0C,$0C,$0C,$0C,$0C,$0C,$0C,$0C,$0C
+		dta $0D,$0D,$0D,$0D,$0D,$0D,$0D,$0E,$0E,$0E,$0E,$0E,$0E,$0E,$0E,$0E
+		dta $0F,$0F,$0F,$0F,$0F,$0F,$0F,$0F,$10,$10,$10,$10,$10,$10,$10,$10
+		dta $11,$11,$11,$11,$11,$11,$11,$11,$11,$12,$12,$12,$12,$12,$12,$12
+		dta $13,$13,$13,$13,$13,$13,$13,$13,$13,$13,$14,$14,$14,$14,$14,$14
+		dta $15,$15,$15,$15,$15,$15,$15,$15,$15,$15,$15,$16,$16,$16,$16,$16
+		dta $17,$17,$17,$17,$17,$17,$17,$17,$17,$17,$17,$17,$18,$18,$18,$18
+		dta $19,$19,$19,$19,$19,$19,$19,$19,$19,$19,$19,$19,$19,$1A,$1A,$1A
+		dta $1B,$1B,$1B,$1B,$1B,$1B,$1B,$1B,$1B,$1B,$1B,$1B,$1B,$1B,$1C,$1C
+		dta $1D,$1D,$1D,$1D,$1D,$1D,$1D,$1D,$1D,$1D,$1D,$1D,$1D,$1D,$1D,$1E
+		dta $1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F
+
+; 32B + 32B: D->(p0,p1)
+lut_p0_ln	dta $00,$00,$01,$01,$02,$02,$03,$03,$04,$04,$05,$05,$06,$06,$07,$07
+		dta $08,$08,$09,$09,$0A,$0A,$0B,$0B,$0C,$0C,$0D,$0D,$0E,$0E,$0F,$0F
+
+lut_p1_ln	dta $00,$01,$01,$02,$02,$03,$03,$04,$04,$05,$05,$06,$06,$07,$07,$08
+        	dta $08,$09,$09,$0A,$0A,$0B,$0B,$0C,$0C,$0D,$0D,$0E,$0E,$0F,$0F,$0F
+
+lut_p0_un	dta $00,$00,$10,$10,$20,$20,$30,$30,$40,$40,$50,$50,$60,$60,$70,$70
+		dta $80,$80,$90,$90,$A0,$A0,$B0,$B0,$C0,$C0,$D0,$D0,$E0,$E0,$F0,$F0
+
+lut_p1_un	dta $00,$10,$10,$20,$20,$30,$30,$40,$40,$50,$50,$60,$60,$70,$70,$80
+        	dta $80,$90,$90,$A0,$A0,$B0,$B0,$C0,$C0,$D0,$D0,$E0,$E0,$F0,$F0,$F0
+
+
+; ------------------------------------------------------------------------------
+;
+; clear screen memory area
+;
+
+clr_scr		ldx	#$1e
+		ldy	#$00
+		tya
+?clp0		sta	sbs_scr0,y
+?clp1		sta	sbs_scr1,y
+		dey
+		bne	?clp0
+		
+		inc	?clp0+2
+		inc	?clp1+2
+		dex
+		bne	?clp0
+		
+		rts
+
+
+; ------------------------------------------------------------------------------
+;
+; tranfers picture data from XMS bank
+;
+
+zuk_xms_trans	lda	ZUKS_XMS_BANK
+		jsr	un_zx7_set_bnk
+
+		ldx	#<[zuks_dst]
+		ldy	#>[zuks_dst]
+		jsr	un_zx7_set_dst
+
+		ldx	#<rzogs_npx
+		ldy	#>rzogs_npx
+		jmp	un_zx7
+
+bob_par_val	dta	0,0,0,0		; adcX1, adcX2, spdX1,spdX2
+		dta	0,0,0,0		; adcY1, adcY2, spdY1,spdY2
+		dta	0,0,0,0		; phdX , phdY , phsX , phsY
+
+sbob_idx	dta	$00
+sbobs_count	dta	$00
+bobs_type	dta	$00
+btle_color	dta	$b0
+
+bob_time	dta	$c0
+
+tBOB		equ	0
+tPXL		equ	1
+
+;                       0_   1_   2_   3_     
+bob_par_adcx1	dta	+$04,+$03,-$03,+$01
+bob_par_adcx2	dta	+$04,-$02,-$03,+$01
+bob_par_spdx1	dta	+$01,-$02,-$01,-$01
+bob_par_spdx2	dta	-$01,-$06,+$02,-$02
+
+bob_par_adcy1	dta	+$04,+$03,-$01,-$02
+bob_par_adcy2	dta	-$04,+$02,+$03,+$01
+bob_par_spdy1	dta	+$02,+$02,+$02,+$01
+bob_par_spdy2	dta	+$02,-$02,-$01,-$02
+
+bob_par_phdX	dta	-$40,+$00,-$26,+$15
+bob_par_phdY	dta	+$00,+$02,-$7e,-$40
+bob_par_phsX	dta	+$40,+$7e,-$80,-$40
+bob_par_phsY	dta	+$00,-$80,+$20,-$75
+
+;bob_par_colr	dta	$041,$060,$04c,$0fa
+bob_par_colr	dta	$020,$060,$080,$0f0
+
+bob_par_bcnt	dta	0016,0016,0016,0016
+bob_par_mode	dta	tBOB,tBOB,tBOB,tBOB
+
+shapes_count	dta	$04
+
+; proc loads example parameters
+
+sbob_ld_e	txa
+		pha
+		tya
+		pha
+
+		lda	#$00
+		sta	bob_dx1+1
+		sta	bob_dx2+1
+		sta	bob_dy1+1
+		sta	bob_dy2+1
+
+		ldx	sbob_idx
+
+		lda	bob_par_adcx1,x
+		sta	bob_par_val
+		lda	bob_par_adcx2,x
+		sta	bob_par_val+1
+
+		lda	bob_par_spdx1,x
+		sta	bob_par_val+2
+		lda	bob_par_spdx2,x
+		sta	bob_par_val+3
+
+		lda	bob_par_adcy1,x
+		sta	bob_par_val+4
+		lda	bob_par_adcy2,x
+		sta	bob_par_val+5
+
+		lda	bob_par_spdy1,x
+		sta	bob_par_val+6
+		lda	bob_par_spdy2,x
+		sta	bob_par_val+7
+
+		lda	bob_par_bcnt,x
+		sta	sbobs_count
+
+		lda	bob_par_colr,x
+		sta	btle_color
+
+		lda	bob_par_phsX,x
+		sta	bob_par_val+10
+		sta	bob_sx1
+
+		lda	bob_par_phsY,x
+		sta	bob_par_val+11
+		sta	bob_sy1
+		
+		lda	bob_par_phdX,x
+		sta	bob_par_val+8
+		sta	bob_sx2
+
+		lda	bob_par_phdY,x
+		sta	bob_par_val+9
+		sta	bob_sy2
+
+		inc	sbob_idx
+		lda	sbob_idx
+		eor	#[bob_par_adcx2-bob_par_adcx1]
+		bne	*+5
+		sta	sbob_idx
+
+		pla
+		tay
+		pla
+		tax
+		rts
+
+; parameters copy proc
+
+sbob_par_cpy	lda	bob_par_val
+		sta	bob_adc_x1+1
+		lda	bob_par_val+1
+		sta	bob_adc_x2+1
+
+		lda	bob_par_val+2
+		sta	bob_spd_x1+1
+		lda	bob_par_val+3
+		sta	bob_spd_x2+1
+
+		lda	bob_par_val+4
+		sta	bob_adc_y1+1
+		lda	bob_par_val+5
+		sta	bob_adc_y2+1
+
+		lda	bob_par_val+6
+		sta	bob_spd_y1+1
+		lda	bob_par_val+7
+		sta	bob_spd_y2+1
+
+		lda	bob_par_val+8
+		sta	bob_sx2
+		lda	bob_par_val+9
+		sta	bob_sy2
+
+		lda	bob_par_val+10
+		sta	bob_sx1
+		lda	bob_par_val+11
+		sta	bob_sy1
+
+		rts
+
+;		jmp	btle_upd_color		; not needed when btle_upd_color is below!
+
+; update colors
+
+btle_upd_color	lda	#$00		; always black
+		sta	$d01a
+		sta	$d016
+
+		lda	btle_color
+		and	#$f0
+		clc
+		adc 	#$04
+		sta	$d017
+		adc 	#$04
+		sta	$d018		
+		adc	#$04
+		sta	$d019
+
+		rts
+
+; ------------------------------------------------------------------------------
+
+sbs_make_luts	ldx	#$00
+
+		mwa	#sbs_scr0 sbs_ad0
+		mwa	#sbs_scr1 sbs_ad1
+
+?lp0		lda	sbs_ad0			; address LUT for page0
+		sta	sc0_adr_lo,x
+		lda	sbs_ad0+1
+		sta	sc0_adr_hi,x
+
+		lda	sbs_ad1			; adress LUT for page1
+		sta	sc1_adr_lo,x
+		lda	sbs_ad1+1
+		sta	sc1_adr_hi,x
+
+		clc				; incr. pg0 adr.
+		lda	#40
+		adc	sbs_ad0
+		sta	sbs_ad0
+		bcc	*+4
+		inc	sbs_ad0+1
+
+		clc				; incr. pg1 adr.
+		lda	#40
+		adc	sbs_ad1
+		sta	sbs_ad1
+		bcc	*+4
+		inc	sbs_ad1+1
+
+
+		txa				; upper nibble only LUT
+		and	#$f0
+		sta	hi_nib_only,x
+
+		txa				; LSR x4 LUT
+		lsr	@
+		lsr	@
+		lsr	@
+		lsr	@
+		sta	hi_nib_lsr4,X
+
+		txa				; lower nibble only LUT
+		and	#$0f
+		sta	lo_nib_only,x
+
+		txa				; ASL x4 LUT
+		asl	@
+		asl	@
+		asl	@
+		asl	@
+		sta	lo_nib_asl4,X
+
+		txa
+		and	#$0F
+		sec
+		sbc	#4
+		bcs	*+4
+		lda	#0
+
+		sta	px0
+
+		lda	hi_nib_lsr4,x
+		sec
+		sbc	#4
+		bcs	*+4
+		lda	#0
+		tay
+		lda	lo_nib_asl4,y
+		ora	px0
+
+		sta	dark_lut,x
+
+		inx
+		bne	?lp0
+
+		rts
+
+sbs_make_dl	stx	sbs_put_dl+1
+		sty	sbs_put_dl+2
+		tya
+		pha
+		txa
+		pha
+
+		lda	#ZUK_PIC_LINES
+		sta	sbs_dl_cnt
+
+		ldx	#4
+	
+		lda	#$70
+?emr		jsr	sbs_put_dl
+		dex
+		bpl	?emr
+
+		lda	#$f0
+		jsr	sbs_put_dl
+
+
+?lp0		lda	#$4f
+		ldx	sbs_ad0
+		ldy	sbs_ad0+1
+		jsr	sbs_put_seq
+
+		clc
+		lda	#40
+		adc	sbs_ad0
+		sta	sbs_ad0
+		bcc	*+4
+		inc	sbs_ad0+1
+
+		dec	sbs_dl_cnt
+		bne	?lp0
+
+		ift	TCR_DISPLAY
+		lda	#$f0
+		jsr	sbs_put_dl
+		lda	#$46
+		jsr	sbs_put_dl
+		lda	#<tcr_info
+		jsr	sbs_put_dl
+		lda	#>tcr_info
+		jsr	sbs_put_dl
+		eif
+
+		pla
+		tax
+		pla
+		tay
+		lda	#$41
+;		jmp	sbs_put_seq		; not need when...
+
+sbs_put_seq	jsr	sbs_put_dl
+		txa
+		jsr	sbs_put_dl
+		tya
+;		jsr	sbs_put_dl		; not needed when sbs_put_dl is directly below
+sbs_put_dl	sta	$ffff
+		inw	sbs_put_dl+1
+		rts
+
+sbs_dl_cnt	dta	0
+
+; ------------------------------------------------------------------------------
+;
+; DLI routines
+;
+
+dli_bob0	sta	?reg_A+1
+		stx	?reg_X+1
+		sty	?reg_Y+1
+
+		lda	#$40
+		ldy	#$21
+		ldx	#ZUK_PIC_LINES
+		sta	$d40a
+		bne	?djmp
+
+?dlp0		sta	$d40a
+?djmp		sta	$d01b-$21,y
+:15		nop
+		sty	$d01b
+		dex
+		bne	?dlp0
+
+		ift	TCR_DISPLAY
+		mwa	#dli_bob1 dli_vec
+		eif
+
+?reg_A		lda	#0
+?reg_X		ldx	#0
+?reg_Y		ldy	#0
+		rti
+
+dli_bob1	sta	?reg_A+1
+		stx	?reg_X+1
+		sty	?reg_Y+1
+
+		lda	#$c4
+		sta	$d016
+
+?reg_A		lda	#0
+?reg_X		ldx	#0
+?reg_Y		ldy	#0
+		rti
+
+; VBL routine
+
+vbl_bob		lda	vbl_cnt
+		lsr	@
+
+		ldx	<sbs_dl0
+		ldy	>sbs_dl0
+		bcc	*+6
+		ldx	<sbs_dl1
+		ldy	>sbs_dl1
+		stx	$d402
+		sty	$d403
+
+		jsr	gem_led_vbl
+
+		lda	btle_fade_dir+1		; check for fade-out phase
+		cmp	#-1
+		bne	?do_pulse
+		lda	#$2c
+		sta	set_gem_lum?stop_hbt
+
+		lda	btle_fade_idx
+;		lsr	@
+		bne	?do_fdo
+		jsr	led_gem_off
+;		lda	#$00
+
+?do_fdo		lda	set_gem_lum?gem_lum_idx+1
+		beq	?do_pulse
+		dec	set_gem_lum?gem_lum_idx+1
+
+		lda	#$02
+		sta	hb_rate
+		sta	set_gem_lum?set_hb_rate+1
+
+?do_pulse	jsr	set_gem_lum
+
+		mwa	#dli_bob0 dli_vec
+
+		ift	TCR_DISPLAY
+		lda	#$00
+		sta	$d016
+		eif
+
+		lda	sbobs_tmr
+		ora	sbobs_tmr+1
+		beq	?sk_dec
+
+		lda	sbobs_tmr
+		bne	*+5
+		dec	sbobs_tmr+1
+		dec	sbobs_tmr
+?sk_dec		
+
+; fade in/out 
+
+		ldx	btle_fade_idx
+		lda	btle_lut_r0,x
+		beq	*+5
+		ora	btle_color
+		sta	$d017
+
+		ldx	btle_fade_idx
+		lda	btle_lut_r1,x
+		beq	*+5
+		ora	btle_color
+		sta	$d018
+
+		ldx	btle_fade_idx
+		lda	btle_lut_r2,x
+		beq	*+5
+		ora	btle_color
+		sta	$d019
+
+		txa
+		clc
+btle_fade_dir	adc	#$00
+		bmi	?fd_skip
+		cmp	#$08
+		bcs	?fd_skip
+		sta	btle_fade_idx
+
+?fd_skip	rts
+
+sbobs_tmr	dta	a($180)
+btle_luma	dta	$00
+btle_fade_idx	dta	$00
+
+
+; fade-in common curve for all color regs.
+btle_lut_r0	dta $00,$00,$02,$02,$02,$04,$04,$04
+btle_lut_r1	dta $00,$00,$02,$04,$04,$06,$08,$08
+btle_lut_r2	dta $00,$02,$04,$06,$08,$0A,$0C,$0E
+
+sbs_fade_out	stx	?reg_X+1
+		sty	?reg_Y+1
+
+		lda	#ZUK_PIC_LINES
+		sta	?fdl_lp+1
+
+?fdl_lp		ldx	#ZUK_PIC_LINES
+?lp0		lda	sc0_adr_lo-1,x		; get line address for bit-plane #0
+		sta	?pg0_src+1
+		sta	?pg0_dst+1
+		lda	sc0_adr_hi-1,x
+		sta	?pg0_src+2
+		sta	?pg0_dst+2
+
+		lda	sc1_adr_lo-1,x		; get line address for bit-plane #1
+		sta	?pg1_src+1
+		sta	?pg1_dst+1
+		lda	sc1_adr_hi-1,x
+		sta	?pg1_src+2
+		sta	?pg1_dst+2
+		
+		ldy	#23
+?pg0_src	ldx	$ffff,y
+		lda	dark_lut,x
+?pg0_dst	sta	$ffff,y
+
+?pg1_src	ldx	$ffff,y
+		lda	dark_lut,x
+?pg1_dst	sta	$ffff,y
+
+		dey
+		bpl	?pg0_src
+		
+		dec	?fdl_lp+1
+		bne	?fdl_lp
+
+?reg_X		ldx	#0
+?reg_Y		ldy	#0
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; this proc do a shade plot on both bit-planes
+;
+; in: X,Y regs -> pixel position
+
+shade_plot	lda	sc0_adr_lo,y		; get line address for bit-plane #0
+		sta	sbs_ad0
+		lda	sc0_adr_hi,y
+		sta	sbs_ad0+1
+		
+		lda	sc1_adr_lo,y		; get line address for bit-plane #1
+		sta	sbs_ad1
+		lda	sc1_adr_hi,y
+		sta	sbs_ad1+1
+		
+		txa
+		lsr	@
+		tay
+		sty	xpos
+		bcs	?lower			; go to lower nibble
+
+; upper nibble 
+
+?upper		lda	(sbs_ad0),y
+		tax
+		and	#$0f
+		sta	px0
+		lda	(sbs_ad1),y
+		tay
+		and	#$0f
+		sta	px1
+
+		lda	hi_nib_only,x
+		ora	hi_nib_lsr4,y
+		tay
+		ldx	mix_add_lut,y
+
+		ldy	xpos
+		lda	lut_p0_un,x
+		ora	px0
+		sta	(sbs_ad0),y
+
+		lda	lut_p1_un,x
+		ora	px1
+		sta	(sbs_ad1),y
+		rts
+
+; lowe nibble
+?lower		lda	(sbs_ad0),y
+		tax
+		and	#$f0
+		sta	px0
+		lda	(sbs_ad1),y
+		tay
+		and	#$f0
+		sta	px1
+
+		lda	lo_nib_asl4,x
+		ora	lo_nib_only,y
+		tay
+		ldx	mix_add_lut,y
+
+		ldy	xpos
+		lda	lut_p0_ln,x
+		ora	px0
+		sta	(sbs_ad0),y
+
+		lda	lut_p1_ln,x
+		ora	px1
+		sta	(sbs_ad1),y
+
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; this proc draw bobs
+;
+
+draw_bobs	lda	sbobs_count
+		sta	scnt
+
+		lda	bob_sx1
+		sta	bob_dx1
+		lda	bob_sx2
+		sta	bob_dx2
+
+		lda	bob_sy1
+		sta	bob_dy1
+		lda	bob_sy2
+		sta	bob_dy2
+
+		clc
+bob_spd_x1	lda	#3
+		adc	bob_sx1
+		sta	bob_sx1
+		clc
+bob_spd_x2	lda	#4
+		adc	bob_sx2
+		sta	bob_sx2
+
+		clc
+bob_spd_y1	lda	#-3
+		adc	bob_sy1
+		sta	bob_sy1
+		clc
+bob_spd_y2	lda	#5
+		adc	bob_sy2
+		sta	bob_sy2
+
+shd_plt_loop	clc
+		ldx	bob_dx1
+		lda	shd_sine_x,x
+		ldx	bob_dx2
+		adc	shd_sine_x,x
+		lsr	@
+		tax
+		stx	xp
+
+		clc
+		ldy	bob_dy1
+		lda	shd_sine_y,y
+		ldy	bob_dy2
+		adc	shd_sine_y,y
+		tay
+		sty	yp
+
+		jsr	shade_plot
+
+		lda	bobs_type
+		bne	?pxl_mode
+
+		ldx	xp
+		inx
+		stx	xp
+		ldy	yp
+		dey
+		jsr	shade_plot
+
+		ldx	xp
+		ldy	yp
+		jsr	shade_plot
+
+		ldx	xp
+		ldy	yp
+		iny
+		jsr	shade_plot
+
+		ldx	xp
+		inx
+		ldy	yp
+		jsr	shade_plot
+
+?pxl_mode
+		clc
+bob_adc_x1	lda	#8
+		adc	bob_dx1
+		sta	bob_dx1		
+
+		clc
+bob_adc_x2	lda	#-7
+		adc	bob_dx2
+		sta	bob_dx2		
+
+		clc
+bob_adc_y1	lda	#-8
+		adc	bob_dy1
+		sta	bob_dy1		
+
+		clc
+bob_adc_y2	lda	#8
+		adc	bob_dy2
+		sta	bob_dy2		
+
+		dec	scnt
+		bne	shd_plt_loop
+
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; code start here
+;
+
+s_bobs		jsr	wait_vsync
+		lda	#$00
+		sta	$d400
+
+		jsr	zuk_xms_trans
+		jsr	clr_scr
+
+		mwa	#sbs_scr0 sbs_ad0
+		ldx	<sbs_dl0
+		ldy	>sbs_dl0
+		jsr	sbs_make_dl
+
+		mwa	#sbs_scr1 sbs_ad0
+		ldx	<sbs_dl1
+		ldy	>sbs_dl1
+		jsr	sbs_make_dl
+
+		jsr	sbs_make_luts
+
+		jsr	cls_scr
+
+		lda	#$00
+		sta	$d016
+		sta	$d017
+		sta	$d018
+		sta	$d019
+
+		mwa	#sbs_dl0 $d402
+		mwa	#vbl_bob vbl_vec
+		mwa	#dli_bob0 dli_vec
+
+		lda	#$b0			; change gem color!
+		sta	set_gem_lum?gem_col_a+1
+		sta	set_gem_lum?gem_col_b+1
+
+
+		lda	#$00
+		ldy	#$73
+		jsr	led_gem_on
+
+		lda	#$0d			; limit mem clr area!
+		sta	led_gem_on?pmg_mod1+1
+		lda	#$10			; BPL mnemonic!
+		sta	led_gem_on?pmg_mod2
+
+		jsr	wait_vsync
+		lda	#$3e
+		sta	$d400
+		dec	$d40e
+		
+		lda	#32
+		sta	sbobs_count
+
+		ldx	#<$17a0
+		ldy	#>$17a0
+		jsr	wait4frame
+
+		mwa	#[$180-50] sbobs_tmr
+
+
+bob_rest	jsr	sbob_ld_e
+		jsr	sbob_par_cpy
+
+?zuk_sel	lda	#$01
+		eor	#$01
+		sta	?zuk_sel+1
+		lsr	@
+		jsr	copy_beetle
+
+		lda	#$8d			; restore heart-beat
+		sta	set_gem_lum?stop_hbt
+
+		lda	#12			; restore heart beat rate!
+		sta	set_gem_lum?set_hb_rate+1
+
+		lda	#1
+		sta	btle_fade_dir+1
+
+		lda	#$af
+		ldy	#$73
+		bcc	?zuk_gm2
+
+		lda	#$b0
+		ldy	#$74
+?zuk_gm2	jsr	led_gem_on
+
+bob_loop	jsr	wait_vsync
+		jsr	draw_bobs
+		
+		lda	sbobs_tmr
+		ora	sbobs_tmr+1
+		bne	bob_loop		
+
+		lda	#-1
+		sta	btle_fade_dir+1
+
+?slfa		jsr	wait_vsync
+		mwa	#$180 sbobs_tmr
+
+		ldx	#3
+fade_loop	jsr	wait_vsync
+		jsr	sbs_fade_out
+		dex
+		bpl	fade_loop
+
+		jsr	led_gem_era
+
+		dec	shapes_count
+		bne	bob_rest
+
+		jsr	led_gem_off
+
+		lda	#$00
+		sta	$d400
+		sta	$d01a
+		sta	$d018
+		sta	$d01b
+		lsr	$d40e
+
+		mwa	#rts_rts vbl_vec
+		mwa	#rti_rti dli_vec
+		rts
+
+zuk_col_tab	dta	$04,$08,$0f
+zuk_col_rem	dta	$00,$00,$00
+zuk_col_sub	dta	$40,$80,$ff
+
+; clears the shade plot area
+
+cls_scr		ldx	#0
+
+?lp0		lda	sc0_adr_lo,x
+		sta	sbs_ad0
+		lda	sc1_adr_lo,x
+		sta	sbs_ad1
+
+		lda	sc0_adr_hi,x
+		sta	sbs_ad0+1
+		lda	sc1_adr_hi,x
+		sta	sbs_ad1+1
+
+		ldy	#23
+		lda	#0
+?lp1		sta	(sbs_ad0),y
+		sta	(sbs_ad1),y
+		dey
+		bpl	?lp1
+
+		inx
+		cpx	#ZUK_PIC_LINES
+		bcc 	?lp0
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; copy zuk image to screen
+;
+
+copy_beetle	php
+
+		mwa	#zuk_a_f0 sbs_ad0
+		mwa	#zuk_a_f1 sbs_ad1
+		bcc	?skp
+		mwa	#zuk_b_f0 sbs_ad0
+		mwa	#zuk_b_f1 sbs_ad1
+
+?skp		mwa	#sbs_scr0+24 sbs_ad2
+		mwa	#sbs_scr1+24 sbs_ad3
+		
+		ldx	#[ZUK_PIC_LINES]
+
+?cpl0		ldy	#15
+
+?cpl1		lda	(sbs_ad0),y	; copy line of 1st bitplane
+		sta	(sbs_ad2),y
+
+		lda	(sbs_ad1),y	; copy line of 2nd bitplane
+		sta	(sbs_ad3),y
+
+		dey
+		bpl	?cpl1		; "line copy" loop
+
+		clc			; advance source address pointers
+		lda	#16
+		adc	sbs_ad0
+		sta	sbs_ad0
+		sta	sbs_ad1
+		bcc	*+6
+		inc	sbs_ad0+1
+		inc	sbs_ad1+1
+
+		clc			; advance destination address pointers
+		lda	#40
+		adc	sbs_ad2
+		sta	sbs_ad2
+		sta	sbs_ad3
+		bcc	*+6
+		inc	sbs_ad2+1
+		inc	sbs_ad3+1
+
+		dex
+		bne	?cpl0
+
+		plp
+		rts

@@ -1,0 +1,115 @@
+set_dli		equ	$3100
+ldr_dl0		equ	$3200
+ldr_dl1		equ	$3300
+
+ldr_scr0	equ	$2400
+ldr_scr1	equ	$3400
+
+data_blob	equ	ldr_scr0
+
+		org	$4000
+
+wait_vbl	lda	$14
+		cmp	$14
+		beq	*-2
+		rts
+
+fade_main	ldy	#$0f
+
+fdm0	:2	jsr	wait_vbl
+		ldx	#$08
+
+fdm1		lda	$2c0,x
+		and	#$0f
+		bne	fdm2
+		sta	$2c0,x
+		beq	fdm3
+fdm2		dec	$2c0,x
+fdm3		dex
+		bpl	fdm1
+
+		dey
+		bpl	fdm0
+
+		rts
+
+		ini	fade_main
+
+		org	fade_main
+
+; compressed loading screen
+
+rle_data	ins	"gfx/loading2.bin.rle"
+
+; fade in parameters
+
+col_tab		dta	$b0,$b0,$b0
+col_rem		dta	$00,$00,$00
+col_add		dta	$40,$80,$ff
+
+; ------------------------------------------------------------------------------
+;
+; RLE depack routine
+;
+
+rle_depack	jsr	rle_get
+		ora	#$00
+		beq	rle_stop
+		lsr	@
+		tay
+
+rle_loop_c	jsr	rle_get
+rle_loop_r	sta	data_blob
+		inw	rle_loop_r+1
+		dey
+		bmi	rle_depack
+		bcs	rle_loop_c
+		bcc	rle_loop_r
+
+rle_get		lda	rle_data
+		inw	rle_get+1
+rle_stop	rts
+
+; ------------------------------------------------------------------------------
+;
+; uncompress DL, picture and show it (with fade in)
+;
+
+show_pic	jsr	rle_depack
+		jsr	wait_vbl
+
+		mwa	#ldr_dl0 $230
+		lda	#$21
+		sta	$22f
+
+		jsr	set_dli
+
+		ldy	#$0f
+
+?fdi_lp0	jsr	wait_vbl
+
+		ldx	#2
+?fdi_lp1	clc
+		lda	col_rem,x
+		adc	col_add,x
+		sta	col_rem,x
+		bcc	*+5
+		inc	col_tab,x
+
+		lda	col_tab,x
+		sta	$2c4,x
+
+		dex
+		bpl	?fdi_lp1
+		
+		dey
+		bpl	?fdi_lp0
+
+		iny
+		sty	$12		; reset system RTC
+		sty	$13
+		sty	$14
+
+		rts
+
+		ini	show_pic

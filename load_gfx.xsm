@@ -1,0 +1,33 @@
+snk_np0		equ	$4000
+snk_np1		equ	$4000+[84*32]
+castle8		equ	$4000+[84*32]
+
+
+		ini	set_next_bank		; bank #1
+		org	$4000
+whale_npx	ins	"gfx/whale3.npx.zx7"
+castl_npx	ins	"gfx/castx_v3.gr8.zx7"
+rzogs_npx	ins	"gfx/zuks_ab.npx.zx7"
+xprop_fnt	ins	"fnt/xry_prop_fnt.bin.zx7"
+pmgmoon		icl	"gfx/moon.spr"
+
+		ert	*>$7fff
+
+		ini	set_next_bank		; bank #2
+		org	$4000
+
+slt_logo_bp0	ins	"gfx/slt_logo.bp0.zx7"
+slt_logo_bp1	ins	"gfx/slt_logo.bp1.zx7"
+rev_logo_bp0	ins	"gfx/rev_logo.bp0.zx7"
+rev_logo_bp1	ins	"gfx/rev_logo.bp1.zx7"
+rzg_logo_bp0	ins	"gfx/rzg_logo.bp0.zx7"
+rzg_logo_bp1	ins	"gfx/rzg_logo.bp1.zx7"
+sbn_logo_bp0	ins	"gfx/sbn_logo.bp0.zx7"
+sbn_logo_bp1	ins	"gfx/sbn_logo.bp1.zx7"
+xry_logo_bp0	ins	"gfx/xry_logo.bp0.zx7"
+xry_logo_bp1	ins	"gfx/xry_logo.bp1.zx7"
+
+		ert	*>$7fff
+
+
+		ini	prep_bank_table

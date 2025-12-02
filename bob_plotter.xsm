@@ -1,0 +1,869 @@
+BOBS_COUNT	equ	24
+XMS_LUT_BANK	equ	[banks+0]
+
+plt_ad0		equ	bobp_zp_loc 	;	org	*+2
+plt_ad1		equ	bobp_zp_loc+2	;	org	*+2
+plt_ad2		equ	bobp_zp_loc+4	;	org	*+2
+plt_ad3		equ	bobp_zp_loc+6	;	org	*+2
+
+video_page	equ	bobp_zp_loc+8	;	org	*+1
+bob_idx		equ	bobp_zp_loc+9	;	org	*+1
+
+dx1		equ	bobp_zp_loc+10	;	org	*+1
+dx2		equ	bobp_zp_loc+11	;	org	*+1
+dy1		equ	bobp_zp_loc+12	;	org	*+1
+dy2		equ	bobp_zp_loc+13	;	org	*+1
+dz1		equ	bobp_zp_loc+14	;	org	*+1
+dz2		equ	bobp_zp_loc+15	;	org	*+1
+
+sx1		equ	bobp_zp_loc+16	;	org	*+1
+sx2		equ	bobp_zp_loc+17	;	org	*+1
+sy1		equ	bobp_zp_loc+18	;	org	*+1
+sy2		equ	bobp_zp_loc+19	;	org	*+1
+sz1		equ	bobp_zp_loc+20	;	org	*+1
+sz2		equ	bobp_zp_loc+21	;	org	*+1
+
+x_plt		equ	bobp_zp_loc+22	;	org	*+1
+
+bobp_free	equ	bobp_zp_loc+23
+
+		ert	bobp_free>$80
+
+plt_scr0	equ	$2000
+plt_scr1	equ	$4000
+
+pltr_dl0	equ	dl0		;	org	*+$100
+pltr_dl1	equ	dl1		;	org	*+$100
+
+era_adr_lo	equ	free_pg0	;	org	*+$80
+era_adr_hi	equ	free_pg0+$80	;	org	*+$80
+
+scr_adr_lo	equ	free_pg1	;	org	*+$100
+scr_adr_hi	equ	free_pg2	;	org	*+$100
+
+ph_lut		equ	free_pg3	;	org	*+$100
+lsr_lut		equ	free_pg4	;	org	*+$100
+
+x_cord		equ	free_pg5	;	org	*+$40
+y_cord		equ	free_pg5+$40	;	org	*+$40
+z_cord		equ	free_pg5+$80	;	org	*+$40
+f_cord		equ	free_pg5+$c0	;	org	*+$40
+
+plt_sine_x	equ	$c000
+plt_sine_y	equ	$c100
+plt_sine_z	equ	$c200
+
+; plotter shapes
+
+;                       0_   1_   2_   3_   4_   5_   6_   7_   8_   9_   a_   b_   c_   d_   e    f    10   11   12   13   14   15   16   17   18   19   1a   1b   1c   1d   1e   1f   20   21
+par_adcx1	dta	+$10,+$10,+$0e,+$01,+$07,+$01,+$05,-$05,+$01,+$11,+$51,-$02,+$01,+$08,+$04,+$03,-$08,-$08,+$7c,-$01,-$0b,-$1b,-$1c,+$01,+$05,+$06
+par_adcx2	dta	+$10,+$08,-$02,-$07,+$7b,-$45,+$7b,+$02,+$05,+$05,+$05,+$05,+$78,-$08,+$04,-$02,+$01,+$03,+$7e,+$7e,+$41,+$51,+$1a,+$70,+$7b,-$80
+par_spdx1	dta	+$01,-$03,-$03,-$04,+$01,+$05,+$02,-$03,-$03,-$03,-$03,-$01,+$01,+$04,+$01,-$02,+$06,+$03,-$0b,-$0b,+$7f,+$00,+$03,+$05,+$03,+$03
+par_spdx2	dta	-$02,+$04,+$03,+$04,-$01,-$04,+$7b,-$03,+$03,+$03,+$03,+$03,-$05,-$01,-$01,-$06,-$01,-$01,-$04,-$04,-$01,+$00,+$03,-$01,-$74,+$7f
+
+par_adcy1	dta	+$20,-$10,-$0e,-$01,-$06,-$01,-$05,-$7e,+$05,+$15,-$7b,+$09,-$01,+$10,+$04,+$03,-$06,+$04,+$04,+$03,+$03,+$03,+$08,-$02,-$05,+$7a
+par_adcy2	dta	-$10,+$08,-$02,+$05,-$7b,+$45,-$05,-$02,-$07,-$05,-$05,-$05,-$78,-$08,-$04,+$02,-$06,-$06,-$04,-$04,-$0b,-$0b,-$0a,-$70,-$05,-$06
+par_spdy1	dta	-$02,+$03,+$03,+$04,-$01,-$05,+$02,+$03,+$03,+$03,+$03,+$01,-$01,+$04,+$02,+$02,-$02,-$02,-$02,-$02,-$02,+$00,-$03,-$03,+$03,-$7f
+par_spdy2	dta	-$02,-$05,-$03,-$04,+$01,+$04,+$00,+$03,-$03,-$03,-$03,-$03,+$05,-$01,+$02,-$02,+$06,+$06,-$01,-$01,-$01,-$02,+$00,+$03,+$00,+$00
+
+par_adcz1	dta	+$10,+$05,-$0e,-$01,-$06,-$01,-$05,-$7e,+$05,+$15,-$7b,+$09,-$01,+$13,+$04,+$03,+$04,+$04,+$05,+$05,+$05,+$75,+$04,-$01,-$05,-$06
+par_adcz2	dta	+$10,+$10,+$0e,+$01,+$07,+$01,+$7b,-$05,+$00,+$11,+$51,-$02,+$01,-$05,+$04,+$03,+$0b,+$0b,+$06,+$06,+$06,-$6a,+$04,+$01,+$7b,+$7b
+par_spdz1	dta	+$01,+$02,-$03,-$04,+$01,+$05,+$02,-$03,-$03,-$03,-$03,-$01,+$01,+$02,+$01,-$02,-$04,-$04,-$01,-$01,-$01,+$12,+$1c,+$05,+$02,+$02
+par_spdz2	dta	-$01,+$00,+$03,+$04,-$01,-$04,+$7b,-$03,+$03,+$03,+$03,+$03,-$05,-$03,-$01,-$06,+$14,+$14,+$03,+$03,+$03,+$03,+$01,-$04,+$7b,+$7a
+
+par_bobs_cnt	dta	0024,0048,0024,0048,0024,0024,0048,0024,0048,0024,0024,0048,0024,0048,0024,0024,0048,0048,0048,0048,0048,0048,0048,0048,0048,0048
+par_bcol	dta	$000,$030,$040,$050,$060,$070,$080,$090,$0a0,$0b0,$0c0,$0d0,$0e0,$0f0,$010,$020,$000,$000,$000,$000,$000,$000,$000,$070,$080,$000
+
+
+; !!! PAGE BOUNDARY ALIGN !!!
+
+		org	[[*/256]+1]*256
+
+; the bob shapes (8 stages, non shifted)
+
+shapes		equ	*
+
+k0_f0		dta	$3C,$7E,$FF,$FF,$FF,$FF,$7E,$3C,$00,$00,$00,$00,$00,$00,$00,$00
+k1_f0		dta	$00,$1C,$3E,$7F,$7F,$7F,$3E,$1C,$00,$00,$00,$00,$00,$00,$00,$00
+k2_f0		dta	$00,$18,$3C,$7E,$7E,$3C,$18,$00,$00,$00,$00,$00,$00,$00,$00,$00
+k3_f0		dta	$00,$00,$1C,$3E,$3E,$3E,$1C,$00,$00,$00,$00,$00,$00,$00,$00,$00
+k4_f0		dta	$00,$00,$18,$3C,$3C,$18,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+k5_f0		dta	$00,$00,$00,$08,$1C,$08,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+k6_f0		dta	$00,$00,$00,$18,$18,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+k7_f0		dta	$00,$00,$00,$00,$08,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+
+kx_shifted      org     *+[16*8*8]
+
+bob_adr_lo :8	dta	l(shapes+[#*128]+$00),l(shapes+[#*128]+$10),l(shapes+[#*128]+$20),l(shapes+[#*128]+$30),l(shapes+[#*128]+$40),l(shapes+[#*128]+$50),l(shapes+[#*128]+$60),l(shapes+[#*128]+$70)
+bob_adr_hi :8	dta	h(shapes+[#*128]+$00),h(shapes+[#*128]+$10),h(shapes+[#*128]+$20),h(shapes+[#*128]+$30),h(shapes+[#*128]+$40),h(shapes+[#*128]+$50),h(shapes+[#*128]+$60),h(shapes+[#*128]+$70)
+
+par_val		dta	0,0,0,0,0,0,0,0		; adcX1, adcX2, spdX1,spdX2, adcY1, adcY2, spdY1,spdY2
+		dta	0,0,0,0			; adcZ1, adcZ2, spdZ1,spdZ2
+
+par_idx		dta	$00
+exm_idx		dta	$10
+bobs_cnt	dta	BOBS_COUNT
+
+cls_flag	dta	$00
+set_time_flg	dta	$00
+
+
+; re-init plotter state
+
+pltr_clr	clc
+		lda	#$00
+		sta	sx1
+		sta	sx2
+		adc	#$40
+		sta	sy1
+		sta	sy2
+		adc	#$40
+		sta	sz1
+		sta	sz2
+		rts
+
+; proc loads example parameters
+
+sbob_load_e	txa
+		pha
+		tya
+		pha
+
+		jsr	pltr_clr
+
+		ldx	exm_idx
+
+		lda	par_adcx1,x
+		sta	par_val
+		lda	par_adcx2,x
+		sta	par_val+1
+
+		lda	par_spdx1,x
+		sta	par_val+2
+		lda	par_spdx2,x
+		sta	par_val+3
+
+		lda	par_adcy1,x
+		sta	par_val+4
+		lda	par_adcy2,x
+		sta	par_val+5
+
+		lda	par_spdy1,x
+		sta	par_val+6
+		lda	par_spdy2,x
+		sta	par_val+7
+
+		lda	par_adcz1,x
+		sta	par_val+8
+		lda	par_adcz2,x
+		sta	par_val+9
+
+		lda	par_spdz1,x
+		sta	par_val+10
+		lda	par_spdz2,x
+		sta	par_val+11
+
+		lda	par_bcol,x
+		sta	back_color+1
+
+		lda	par_bobs_cnt,x
+		sta	bobs_cnt
+
+		inc	exm_idx
+		lda	exm_idx
+		eor	#[par_adcx2-par_adcx1]
+		bne	*+5
+		sta	exm_idx
+
+		pla
+		tay
+		pla
+		tax
+		rts
+
+; parameters copy proc
+
+sbob_par_copy	lda	par_val
+		sta	adc_x1+1
+		lda	par_val+1
+		sta	adc_x2+1
+
+		lda	par_val+2
+		sta	spd_x1+1
+		lda	par_val+3
+		sta	spd_x2+1
+
+		lda	par_val+4
+		sta	adc_y1+1
+		lda	par_val+5
+		sta	adc_y2+1
+
+		lda	par_val+6
+		sta	spd_y1+1
+		lda	par_val+7
+		sta	spd_y2+1
+
+		lda	par_val+8
+		sta	adc_z1+1
+		lda	par_val+9
+		sta	adc_z2+1
+
+		lda	par_val+10
+		sta	spd_z1+1
+		lda	par_val+11
+		sta	spd_z2+1
+
+		rts
+
+
+; ------------------------------------------------------------------------------
+;
+; brings sine tables from XMS!
+
+plt_sine_xms	lda	$d301
+		pha
+		lda	XMS_LUT_BANK
+		sta	$d301
+
+		ldx	#0
+
+?lp0		lda	xms_plt_sine_x,x
+		sta	plt_sine_x,x
+
+		lda	xms_plt_sine_y,x
+		sta	plt_sine_y,x
+
+		lda	xms_plt_sine_z,x
+		sta	plt_sine_z,x
+
+		inx
+		bne	?lp0
+
+		pla
+		sta	$d301
+		rts
+; ------------------------------------------------------------------------------
+;
+; make shifted shaped
+
+plt_make_shift	mwa	#shapes+$00 plt_ad0
+		mwa	#shapes+$80 plt_ad1
+		mwa	#shapes+$08 plt_ad2
+		mwa	#shapes+$88 plt_ad3
+
+		lda	#8
+		sta	shift_cnt
+
+?lp0		ldx	#$07
+
+?lp1		ldy	#$07
+
+?lp2		lda	(plt_ad0),y
+		lsr	@
+		sta	(plt_ad1),y
+
+		lda	(plt_ad2),y
+		ror	@
+		sta	(plt_ad3),y		
+
+		dey
+		bpl	?lp2
+
+		clc
+		lda	#$10
+		adc	plt_ad0
+		sta	plt_ad0
+		bcc	*+4
+		inc	plt_ad0+1
+
+		clc
+		lda	#$10
+		adc	plt_ad1
+		sta	plt_ad1
+		bcc	*+4
+		inc	plt_ad1+1
+
+		clc
+		lda	#$10
+		adc	plt_ad2
+		sta	plt_ad2
+		bcc	*+4
+		inc	plt_ad2+1
+
+		clc
+		lda	#$10
+		adc	plt_ad3
+		sta	plt_ad3
+		bcc	*+4
+		inc	plt_ad3+1
+
+		dex
+		bpl	?lp1
+
+		dec	shift_cnt
+		bne	?lp0
+
+		rts
+
+shift_cnt	dta	$08
+
+; ------------------------------------------------------------------------------
+;
+; make LUTs and ADR tables
+
+
+plt_make_luts	ldx	#0
+
+		lda	#$00
+		sta	plt_ad0
+		sta	plt_ad0+1
+
+?lp0		lda	plt_ad0
+		sta	scr_adr_lo,x
+		lda	plt_ad0+1
+		sta	scr_adr_hi,x
+
+		clc
+		lda	#$20
+		adc	plt_ad0
+		sta	plt_ad0
+		bcc	*+4
+		inc	plt_ad0+1
+
+		txa
+		and	#7
+		asl	@
+		asl	@
+		asl	@
+		sta	ph_lut,x
+
+		txa
+		lsr	@
+		lsr	@
+		lsr	@
+		sta	lsr_lut,x
+		
+		cpx	#$80
+		bcs	?skd
+		
+		lda	#<plt_scr0
+		sta	era_adr_lo,x
+		lda	#>plt_scr0
+		sta	era_adr_hi,x
+
+?skd		inx
+		bne	?lp0
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; make display list
+
+plt_make_dl	sta	plt_ad0+1
+		stx	plt_put_dl+1
+		sty	plt_put_dl+2
+		tya
+		pha
+		txa
+		pha
+
+		ift	TCR_DISPLAY
+
+		lda	#$c2
+		sta	$d016
+
+		ldx	#$01
+		lda	#$46
+		jsr	plt_put_dl
+		lda	#<tcr_info
+		jsr	plt_put_dl
+		lda	#>tcr_info
+		jsr	plt_put_dl
+		ldx	#$02
+		els
+		ldx	#$03
+		eif
+		
+		lda	#$70
+?em0		jsr	plt_put_dl
+		dex
+		bne	?em0
+
+
+		lda	#$4f
+		ldx	plt_ad0
+		ldy	plt_ad0+1
+		jsr	plt_put_seq
+
+		ldx	#127
+
+?lp0		lda	#$0f
+		jsr	plt_put_dl
+		dex	sbs_dl_cnt
+		bne	?lp0
+
+		clc
+		lda	plt_ad0+1
+		adc	#>[32*128]
+		tay
+		ldx	plt_ad0
+		lda	#$4f
+		jsr	plt_put_seq
+
+		ldx	#63
+
+?lp1		lda	#$0f
+		jsr	plt_put_dl
+		dex	sbs_dl_cnt
+		bne	?lp1
+
+		pla
+		tax
+		pla
+		tay
+		lda	#$41
+;		jmp	plt_put_seq		; not need when...
+
+plt_put_seq	jsr	plt_put_dl
+		txa
+		jsr	plt_put_dl
+		tya
+;		jsr	plt_put_dl		; not needed when plt_put_dl is directly below
+plt_put_dl	sta	$ffff
+		inw	plt_put_dl+1
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; clear both video pages
+
+bplt_cls	mwa	#plt_scr0 plt_ad0
+		mwa	#plt_scr1 plt_ad1
+
+		ldx	#$1f
+		ldy	#$00
+		tya
+?clp0		sta	(plt_ad0),y
+		sta	(plt_ad1),y
+		dey
+		bne	?clp0
+		inc	plt_ad0+1
+		inc	plt_ad1+1
+		dex
+		bpl	?clp0
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; bob plot VBL routine
+
+bplt_vbl_vec	ldx	<pltr_dl0
+		ldy	>pltr_dl0
+
+		lda	video_page
+		cmp	#>plt_scr0
+		bne	?sdl
+
+		ldx	<pltr_dl1
+		ldy	>pltr_dl1
+		
+?sdl		stx	$d402
+		sty	$d403
+
+		lda	#$21
+		sta	$d400
+		
+back_color	lda	#$00
+		sta	$d01a
+		sta	$d018
+
+bplt_luma	lda	#$01
+		sta	$d017
+
+		lda	vbl_cnt
+		and	#$03
+		bne	?lmsk
+
+		clc
+		lda	bplt_luma+1
+		adc	bplt_ladd
+		bmi	?lmsk
+		cmp	#$0f
+		bcs	?lmsk
+		sta	bplt_luma+1
+
+?lmsk		rts
+
+bplt_ladd	dta	$00
+
+
+; ------------------------------------------------------------------------------
+;
+; 3d cords calculation
+;
+
+pltr_calc_cord	lda	sx1
+		sta	dx1
+		lda	sx2
+		sta	dx2
+
+		lda	sy1
+		sta	dy1
+		lda	sy2
+		sta	dy2
+
+		lda	sz1
+		sta	dz1
+		lda	sz2
+		sta	dz2
+
+		clc
+spd_x1		lda	#3
+		adc	sx1
+		sta	sx1
+		clc
+spd_x2		lda	#4
+		adc	sx2
+		sta	sx2
+
+		clc
+spd_y1		lda	#-3
+		adc	sy1
+		sta	sy1
+		clc
+spd_y2		lda	#5
+		adc	sy2
+		sta	sy2
+
+		clc
+spd_z1		lda	#-3
+		adc	sz1
+		sta	sz1
+		clc
+spd_z2		lda	#2
+		adc	sz2
+		sta	sz2
+
+		ldy	bobs_cnt
+		dey
+
+pltr_loop	ldx	dx1
+		lda	plt_sine_x,x
+		ldx	dx2
+		clc
+		adc	plt_sine_x,x
+		sta	x_cord,y
+
+		ldx	dy1
+		lda	plt_sine_y,x
+		ldx	dy2
+		clc
+		adc	plt_sine_y,x
+		sta	y_cord,y
+
+		ldx	dz1
+		lda	plt_sine_z,x
+		ldx	dz2
+		clc
+		adc	plt_sine_z,x
+		lsr	@
+		lsr	@
+		lsr	@
+		sta	z_cord,y
+
+		clc
+adc_x1		lda	#8
+		adc	dx1
+		sta	dx1		
+
+		clc
+adc_x2		lda	#5
+		adc	dx2
+		sta	dx2		
+
+		clc
+adc_y1		lda	#-3
+		adc	dy1
+		sta	dy1		
+
+		clc
+adc_y2		lda	#6
+		adc	dy2
+		sta	dy2		
+
+adc_z1		lda	#-1
+		adc	dz1
+		sta	dz1		
+
+		clc
+adc_z2		lda	#2
+		adc	dz2
+		sta	dz2		
+
+		dey
+		bpl	pltr_loop
+
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; erase old bobs
+;
+
+pltr_erase_bobs	ldx	#0
+		ldy	bobs_cnt
+
+		lda	video_page
+		eor	#>plt_scr0
+		beq	?ovp
+
+		lda	bobs_cnt
+		tax
+		asl	@
+		tay
+
+?ovp		sty	?bcnt+1
+
+?clp1		lda	era_adr_lo,x
+		sta	plt_ad0
+		clc
+		adc	#1
+		sta	plt_ad1
+
+		lda	era_adr_hi,x
+		sta	plt_ad0+1
+		sta	plt_ad1+1
+
+		clc
+		ldy	#0
+?clp0		lda	#0
+		sta	(plt_ad0),y
+		sta	(plt_ad1),y
+		tya
+		adc	#$20
+		tay	
+		bne	?clp0
+
+		inx
+?bcnt		cpx	#$00
+		bcc	?clp1
+
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; plot bobs
+;
+
+pltr_draw_bobs	
+
+		ldx	bobs_cnt
+		dex
+		stx	bob_idx
+		
+?blt_loop	ldx	bob_idx
+
+		ldy	x_cord,x
+		sty	x_plt
+
+		lda	ph_lut,y		; lookup bob offset from LUT
+		ora	z_cord,x		; add Z axis
+		tay
+
+		lda	bob_adr_lo,y
+		sta	?md0+1
+		ora	#8
+		sta	?md1+1
+
+		lda	bob_adr_hi,y
+		sta	?md0+2
+		sta	?md1+2
+
+		ldy	y_cord,x
+
+		ldx	x_plt
+		lda	lsr_lut,x
+
+		clc
+		adc	scr_adr_lo,y
+		sta	plt_ad0
+		clc
+		adc	#1
+		sta	plt_ad1
+
+		lda	scr_adr_hi,y
+		ora	video_page
+		sta	plt_ad0+1
+		sta	plt_ad1+1
+
+		ldx	#7
+		ldy	#0
+
+		clc
+?lbp		lda	(plt_ad0),y		; bob blit loop
+?md0		ora	$cafe,x
+		sta	(plt_ad0),y
+
+		lda	(plt_ad1),y
+?md1		ora	$f00d,x
+		sta	(plt_ad1),y
+
+		tya
+;		clc
+		adc	#$20
+		tay
+
+		dex
+		bpl	?lbp
+
+; store erase address
+
+		lda	#0
+		ldx	video_page
+		cpx	#>plt_scr0
+		beq	?bst
+		lda	bobs_cnt
+
+?bst		clc
+		adc	bob_idx
+		tax
+		
+		lda	plt_ad0
+		sta	era_adr_lo,x
+		lda	plt_ad0+1
+		sta	era_adr_hi,x
+
+		dec	bob_idx
+		bpl	?blt_loop
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; 3d bob blotter main code starts here
+;
+
+last_bobs	sta	exm_idx
+		stx	bob_plotter?snc_lo+1
+		sty	bob_plotter?snc_hi+1
+		txa
+		clc
+		adc	#$80
+		sta	bob_plotter?snc1_lo+1
+		tya
+		adc	#$01
+		sta	bob_plotter?snc1_hi+1
+		jmp	bob_plotter?cont
+
+
+bob_plotter	sta	exm_idx
+		stx	?snc_lo+1
+		sty	?snc_hi+1
+		txa
+		clc
+?bob_plt_mod	adc	#$60
+		sta	?snc1_lo+1
+		bcc	*+3
+		iny
+		sty	?snc1_hi+1
+
+?cont		lda	#$00
+		sta	$d017
+		sta	$d018
+		sta	$d01a
+
+		ldx	#$00
+		stx	bplt_ladd
+		inx
+		stx	bplt_luma+1
+
+		jsr	wait_vsync
+		lda	#$00
+		sta	$d400
+
+		jsr	plt_sine_xms
+		jsr	plt_make_shift
+		jsr	plt_make_luts
+
+		lda	>plt_scr0
+		ldx	<pltr_dl0
+		ldy	>pltr_dl0
+		jsr	plt_make_dl    
+
+		lda	>plt_scr1
+		ldx	<pltr_dl1
+		ldy	>pltr_dl1
+		jsr	plt_make_dl    
+
+		jsr	bplt_cls
+
+		jsr	wait_vsync
+
+		mwa	#bplt_vbl_vec vbl_vec
+		mwa	#pltr_dl0 $d402
+
+		lsr	$d40e
+
+		lda	#$21
+		sta	$d400
+
+		lda	#>plt_scr0
+		sta	video_page
+
+		jsr	sbob_load_e
+		jsr	sbob_par_copy
+
+?wait_sync	lda	msx_frame_cnt		; sync with music!
+?snc_lo		cmp	#$ff
+		lda	msx_frame_cnt+1
+?snc_hi		sbc	#$ff
+		bcc	?wait_sync
+		lda	#$01
+		sta	bplt_ladd
+
+?pltr_mloop	jsr	wait_vsync
+
+		jsr	pltr_calc_cord
+		jsr	pltr_erase_bobs
+		jsr	pltr_draw_bobs
+
+		lda	video_page
+		eor	#[>plt_scr0^>plt_scr1]
+		sta	video_page
+
+?w_sync		lda	msx_frame_cnt		; sync with music!
+?snc1_lo	cmp	#$ff
+		lda	msx_frame_cnt+1
+?snc1_hi	sbc	#$ff
+		bcc	?lmskp2
+		lda	#-1
+		sta	bplt_ladd
+
+?lmskp2		lda	bplt_luma+1
+		bne	?pltr_mloop
+
+		ift	TCR_DISPLAY
+		lda	#$00
+		sta	$d016
+		eif
+
+		jsr	wait_vsync
+		mwa	#rti_rti dli_vec
+		mwa	#rts_rts vbl_vec
+		lsr	$d40e
+		lda	#$00
+		sta	$d400
+		rts
+
+		; jsr	pltr_erase_bobs		
+
+		; lda	video_page
+		; eor	#[>plt_scr0^>plt_scr1]
+		; sta	video_page
+
+		; jsr	pltr_erase_bobs		
+
+
+		; lda	#0
+		; sta	cls_flag
+		; jmp	?pltr_mloop
+

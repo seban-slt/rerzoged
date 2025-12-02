@@ -1,0 +1,1327 @@
+; effect configuration
+
+NUM_PARTICLES	equ     200
+WATER_OFFSET	equ	$90
+WATER_HEIGHT	equ	8
+
+WTR_DEBUG_CODE	equ	DISABLE
+PMG_RASER_TIME	equ	DISABLE
+
+EXT_MEM_BANK	equ	[banks+3]
+EXT_MEM_CODE	equ	[banks+3]
+SPR_MEM_BANK	equ	[banks+1]
+
+WAIT_FOR_KEY	equ	0
+
+; zp variables
+
+scr_ptr		equ     ad0
+wtr_y0		equ	var0		; for PMG waves
+wtr_y1		equ	var1		; for PMG waves
+
+; addresses, LUT's and misc memory locations
+
+p_rnd_lut	equ	free_pg0
+p_xdv_lut	equ	free_pg1
+p_bit_lut	equ	free_pg2
+
+skip_table_lo	equ	free_pg3
+skip_table_hi	equ	free_pg4
+
+; gfx data destination addresses
+
+pic_bp0_a	equ	$0420		; 60 lines
+pic_bp1_a	equ	$0440		; 60 lines
+
+pic_bp0_b	equ	$0460		; 24 lines
+pic_bp1_b	equ	$0480		; 24 lines
+
+pic_castle_a	equ	$04a0
+pic_castle_b	equ	$04c0
+pic_castle_c	equ	$0000
+
+; other
+
+part_code_dst	equ	$4000		; destination address of particle draw code
+pmg_base	equ	$c800		; PMG area
+
+; ------------------------------------------------------------------------------
+;
+; prepares tables needed by effect
+
+fou_make_luts	ldy	#$00
+
+fou_lp0		tya
+		eor	#$80
+		lsr	@
+		lsr	@
+		lsr	@
+		sec
+		sbc	#8
+
+		sta	p_xdv_lut,y
+
+fou_md0		lda	#$80
+		lsr	fou_md0+1
+		bcc	*+5
+		ror	fou_md0+1
+
+		sta	p_bit_lut,y
+
+fou_lp1		lda	$d20a
+		and	#$1f
+		cmp	#$16
+		bcs	fou_lp1
+		adc	#1
+
+		sta	p_rnd_lut,y
+
+		iny
+		bne	fou_lp0
+
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; prepares the display list
+
+fou_make_dl	ldx	#<dl0			; generate 1st DL
+		ldy	#>dl0
+		jsr	fou_1st_pass
+
+		ldx	#$40
+		ldy	#$80
+		stx	fou_mdx1+1
+		sty	fou_mdx2+1
+
+		ldx	#<dl1			; generate 2nd DL
+		ldy	#>dl1
+
+fou_1st_pass	stx	fou_put_dl+1
+		sty	fou_put_dl+2
+		tya
+		pha
+		txa
+		pha
+
+		ift	TCR_DISPLAY
+
+		ldy	#$01
+		lda	#$46
+		jsr	fou_put_dl
+		lda	#<tcr_info
+		jsr	fou_put_dl
+		lda	#>tcr_info
+		jsr	fou_put_dl
+		ldy	#1
+		lda	#$70
+		jsr	fou_put_dl
+
+		els
+
+		ldy	#2
+		lda	#$70
+		jsr	fou_put_dl
+
+		eif
+
+
+		ldx	#0
+
+fou_mdl3	lda	#$4f
+		jsr	fou_put_dl
+		lda	#<pic_castle_a
+		jsr	fou_put_dl
+		txa
+		clc
+		adc	#4
+		jsr	fou_put_dl
+
+		inx
+		cpx	#60
+		bcc	fou_mdl3
+
+fou_mdl4	lda	#$4f
+		cpx	#63
+		bne	*+4
+		ora	#$80
+
+		jsr	fou_put_dl
+		lda	#<pic_castle_b
+		jsr	fou_put_dl
+		txa
+		sec
+		sbc	#[60-4]
+		jsr	fou_put_dl
+
+		inx
+		cpx	#64
+		bcc	fou_mdl4
+
+		ldx	#63
+
+fou_mdl0	lda	#$4f
+
+		cpx	#[10]
+		beq	fou_mdl6
+		cpx	#$00
+		bne	*+4
+fou_mdl6	ora	#$80
+		jsr	fou_put_dl
+		lda	#$00
+		jsr	fou_put_dl
+		txa
+		jsr	fou_put_dl
+
+		dex
+		bpl	fou_mdl0
+
+		ldx	#0
+
+fou_mdl1	lda	#$4e
+		jsr	fou_put_dl
+fou_mdx1	lda	#$20
+		jsr	fou_put_dl
+		txa
+		clc
+		adc	#4
+		jsr	fou_put_dl
+		inx
+		cpx	#60
+		bcc	fou_mdl1
+
+fou_mdl2	lda	#$4e
+		jsr	fou_put_dl
+fou_mdx2	lda	#$60
+		jsr	fou_put_dl
+		txa
+		sec 
+		sbc	#[60-4]
+		jsr	fou_put_dl
+		inx
+		cpx	#84
+		bcc	fou_mdl2
+
+		lda	#$41
+		jsr	fou_put_dl
+		pla
+		jsr	fou_put_dl
+		pla
+		jmp	fou_put_dl
+
+
+fou_put_dl	sta	dl0
+		inw	fou_put_dl+1
+		dey
+		bne	fou_put_dl
+		iny
+		rts		
+
+; ------------------------------------------------------------------------------
+;
+; clear screen memory areas
+
+fou_clr_mem	ldx	#[64-2]
+		ldy	#$00
+		lda	#$00
+fou_cl0		sta	$0200,y
+		dey
+		bne	fou_cl0
+		inc	fou_cl0+2
+		dex
+		bne	fou_cl0
+
+		ldy	#$3f
+fou_cl1		sta	$0000,y
+		sta	$0100,y
+		dey
+		bpl	fou_cl1
+		
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; prepares the gfx data
+
+; "The Whale"
+
+fou_make_snk	lda	banks+1
+		jsr	un_zx7_set_bnk
+	
+		ldx	#<[snk_np0]
+		ldy	#>[snk_np0]
+		jsr	un_zx7_set_dst
+
+		lda	$d301
+		pha
+		lda	EXT_MEM_BANK
+		sta	$d301
+		sta	un_zx7?ret_bnk+1
+
+		ldx	#<whale_npx
+		ldy	#>whale_npx
+		jsr	un_zx7
+
+		pla
+		sta	$d301
+		lda	#$fe
+		sta	un_zx7?ret_bnk+1
+
+		mwa	#snk_np0 ad0
+		mwa	#pic_bp0_a ad1
+
+		jsr	fou_prep_plane
+
+		mwa	#snk_np1 ad0
+		mwa	#pic_bp1_a ad1
+
+fou_prep_plane	lda	$d301
+		pha
+		lda	EXT_MEM_BANK
+		sta	$d301
+
+		ldx	#0
+
+fou_sn0		ldy	#$1f
+
+fou_sn1		lda	(ad0),y		; copy line
+		sta	(ad1),y
+		dey
+		bpl	fou_sn1
+
+		clc
+		lda	#32
+		adc	ad0
+		sta	ad0
+		bcc	*+4
+		inc	ad0+1
+
+		cpx	#60
+		bne	fou_sn2
+
+		clc
+		lda	#$40
+		adc	ad1
+		sta	ad1
+		lda	#$04-1
+		sta	ad1+1
+
+fou_sn2		inc	ad1+1
+
+		inx
+		cpx	#84
+		bcc	fou_sn0
+
+fou_snd		pla
+		sta	$d301
+
+		rts
+
+fou_make_castle	lda	banks+1
+		jsr	un_zx7_set_bnk
+	
+		ldx	#<[castle8]
+		ldy	#>[castle8]
+		jsr	un_zx7_set_dst
+
+		lda	$d301
+		pha
+		lda	EXT_MEM_BANK
+		sta	$d301
+		sta	un_zx7?ret_bnk+1
+
+		ldx	#<castl_npx
+		ldy	#>castl_npx
+		jsr	un_zx7
+
+		pla
+		sta	$d301
+		lda	#$fe
+		sta	un_zx7?ret_bnk+1
+
+		mwa	#castle8 ad0
+		mwa	#[pic_castle_a+20] ad1
+
+		lda	$d301
+		pha
+		lda	EXT_MEM_BANK
+		sta	$d301
+
+		ldx	#[60-1]
+
+fou_mkl0	ldy	#[12-1]
+		
+fou_mkl1	lda	(ad0),y
+		sta	(ad1),y
+		dey
+		bpl	fou_mkl1
+
+		clc
+		lda	#12
+		adc	ad0
+		sta	ad0
+		bcc	*+4
+		inc	ad0+1
+
+		inc	ad1+1
+
+		dex
+		bpl	fou_mkl0
+
+; copy last four lines
+
+		mwa	#[pic_castle_b+20] ad1
+
+		ldx	#[4-1]
+
+fou_mkl2	ldy	#[12-1]
+		
+fou_mkl3	lda	(ad0),y
+		sta	(ad1),y
+		dey
+		bpl	fou_mkl3
+
+		clc
+		lda	#12
+		adc	ad0
+		sta	ad0
+		bcc	*+4
+		inc	ad0+1
+
+		inc	ad1+1
+
+		dex
+		bpl	fou_mkl2
+
+		mwa	#[[63*256]+pic_castle_c+20] ad1
+
+		ldx	#[64-1]
+
+fou_mkl4	ldy	#[12-1]
+		
+fou_mkl5	lda	(ad0),y
+		sta	(ad1),y
+		dey
+		bpl	fou_mkl5
+
+		clc
+		lda	#12
+		adc	ad0
+		sta	ad0
+		bcc	*+4
+		inc	ad0+1
+
+		dec	ad1+1
+
+		dex
+		bpl	fou_mkl4
+
+		pla
+		sta	$d301
+		rts
+
+; ------------------------------------------------------------------------------
+;
+
+make_skip_tbl	mwa	#[part_code_dst+NUM_PARTICLES*3] ad0
+
+		ldx	#NUM_PARTICLES
+
+make_skk0	lda	ad0
+		sta	skip_table_lo-1,x
+		lda	ad0+1
+		sta	skip_table_hi-1,x
+
+		clc
+		lda	#part_code_len
+		adc	ad0
+		sta	ad0
+		bcc	*+4
+		inc	ad0+1
+
+		dex
+		bne	make_skk0
+
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; init PMG
+;
+
+pmg_init	ldx	#$00
+		txa
+pmg_c0		sta	pmg_base+$300,x
+		sta	pmg_base+$400,x
+		sta	pmg_base+$500,x
+		sta	pmg_base+$600,x
+		sta	pmg_base+$700,x
+
+		cpx	#$08
+		bcs	*+5
+		sta	$d000,x			; clear sprite positions
+
+		dex
+		bne	pmg_c0
+
+		lda	#>pmg_base		; setup PMG base address
+		sta	$d407
+			
+		lda	#$20			; enable multi-color sprites
+		sta	$d01b
+
+		ldx	#7
+
+; generate water offset test pattern
+
+		ift	WTR_DEBUG_CODE
+
+pmg_c1		lda	#$aa
+		sta	$cb00+WATER_OFFSET,x
+		sta	$cc00+WATER_OFFSET,x
+		sta	$cd00+WATER_OFFSET,x
+		sta	$ce00+WATER_OFFSET,x
+		sta	$cf00+WATER_OFFSET,x
+		dex
+		lda	#$55
+		sta	$cb00+WATER_OFFSET,x
+		sta	$cc00+WATER_OFFSET,x
+		sta	$cd00+WATER_OFFSET,x
+		sta	$ce00+WATER_OFFSET,x
+		sta	$cf00+WATER_OFFSET,x
+		dex
+		bpl	pmg_c1
+
+		eif
+
+		rts
+
+pmg_enable	lda	$d40b			; setup ANTIC DMA & screen size
+		bne	*-3
+		lda	#$3d
+		sta	$d400
+	
+		lda	#$03			; enable sprites in GTIA
+		sta	$d01d
+		rts
+
+
+pmg_set_xpos	sta	pmg_xpos+1
+		rts
+
+pmg_set_ypos	lda	$d301
+		pha
+		lda	SPR_MEM_BANK
+		sta	$d301
+
+		ldx	#0
+
+pmg_st0		lda	misl,x
+		sta	pmg_base+$300,y
+
+		lda	plr0,x
+		sta	pmg_base+$400,y
+		lda	plr1,x
+		sta	pmg_base+$500,y
+		lda	plr2,x
+		sta	pmg_base+$600,y
+		lda	plr3,x
+		sta	pmg_base+$700,y
+
+		iny
+		inx
+		cpx	#40			; "the moon" height
+		bcc	pmg_st0
+
+		pla
+		sta	$d301
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; water waves on PMG
+;
+
+water_cls	ldy	#WATER_HEIGHT-1
+		lda	#$00
+wtr_cl0		sta	pmg_base+$300+WATER_OFFSET,y
+		sta	pmg_base+$400+WATER_OFFSET,y
+		sta	pmg_base+$500+WATER_OFFSET,y
+		sta	pmg_base+$600+WATER_OFFSET,y
+		sta	pmg_base+$700+WATER_OFFSET,y
+		dey
+		bpl	wtr_cl0
+		rts
+
+water_blitter	ldy	#0
+
+		lda	pmg_base+$300+WATER_OFFSET,y
+		iny
+wtr_bl0		eor	pmg_base+$300+WATER_OFFSET,y
+		sta	pmg_base+$300+WATER_OFFSET,y
+		iny
+		cpy	#WATER_HEIGHT
+		bne	wtr_bl0
+
+		ldy	#0
+		lda	pmg_base+$400+WATER_OFFSET,y
+		iny
+wtr_bl1		eor	pmg_base+$400+WATER_OFFSET,y
+		sta	pmg_base+$400+WATER_OFFSET,y
+		iny
+		cpy	#WATER_HEIGHT
+		bne	wtr_bl1
+
+		ldy	#0
+		lda	pmg_base+$500+WATER_OFFSET,y
+		iny
+wtr_bl2		eor	pmg_base+$500+WATER_OFFSET,y
+		sta	pmg_base+$500+WATER_OFFSET,y
+		iny
+		cpy	#WATER_HEIGHT
+		bne	wtr_bl2
+
+		ldy	#0
+		lda	pmg_base+$600+WATER_OFFSET,y
+		iny
+wtr_bl3		eor	pmg_base+$600+WATER_OFFSET,y
+		sta	pmg_base+$600+WATER_OFFSET,y
+		iny
+		cpy	#WATER_HEIGHT
+		bne	wtr_bl3
+
+		ldy	#0
+		lda	pmg_base+$700+WATER_OFFSET,y
+		iny
+wtr_bl4		eor	pmg_base+$700+WATER_OFFSET,y
+		sta	pmg_base+$700+WATER_OFFSET,y
+		iny
+		cpy	#WATER_HEIGHT
+		bne	wtr_bl4
+
+		rts
+
+water_draw	ldy	#0
+
+wtr_y0_dy	lda	#0
+		sta	wtr_y0
+		clc
+		adc	#3
+		sta	wtr_y0_dy+1
+
+wtr_y1_dy	lda	#0
+		sta	wtr_y1
+		clc
+		adc	#-5
+		sta	wtr_y1_dy+1
+	
+		lda	#WATER_OFFSET
+		sta	ad1
+
+		ldx	#39
+
+wtr_cycle	clc
+		ldy	wtr_y0
+		lda	wtr_sine,y
+		ldy	wtr_y1
+		adc	wtr_sine,y
+		lsr	@
+		lsr	@
+		lsr	@
+		sta	wtr_lvl,x
+		tay
+
+		clc
+		lda	#11
+		adc	wtr_y0
+		sta	wtr_y0
+
+		clc
+		lda	#13
+		adc	wtr_y1
+		sta	wtr_y1
+
+		lda	wtr_xdv,x
+		sta	ad1+1
+
+		lda	p_bit_lut,x
+		ora	(ad1),y
+		sta	(ad1),y
+
+		dex
+		bpl	wtr_cycle
+
+		lda	wtr_lvl
+		eor	#$07
+		sta	wtr_lv_ll+1
+
+		lda	wtr_lvl+39
+		eor	#$07
+		sta	wtr_lv_rr+1
+
+		ldx	#7
+wtr_upd		lda	#0
+wtr_lv_ll	cpx	#0
+		bcs	*+4
+		lda	#$80
+		
+		sta	wtr_lft,x
+
+		lda	#0
+wtr_lv_rr	cpx	#0
+		bcs	*+4
+		lda	#$80
+		
+		sta	wtr_rgt,x
+
+		dex
+		bpl	wtr_upd
+
+		rts
+
+water_adj_dli	
+
+
+water_anim	ift	PMG_RASER_TIME
+
+		lda	#$44
+		sta	$d01a
+
+		eif
+
+		jsr	water_cls
+		jsr	water_draw
+
+		ift	PMG_RASER_TIME
+
+		jsr	water_blitter
+		lda	#$00
+		sta	$d01a
+		rts
+		
+		els
+		jmp	water_blitter
+		eif
+
+		org	[[*/256]*256+$100]		; align to page boundary
+
+wtr_sine	dta	b(sin(16,15,256))
+wtr_xdv	:64	dta	h(pmg_base+$300+256*[#/8])
+wtr_lvl :64	dta	0
+wtr_lvl_adr	dta	a(0)
+
+; ------------------------------------------------------------------------------
+;
+; castle flag animation
+;
+
+flg_scr		equ	$5ba			; address of flag position in screen memory!
+
+flag_anim	lda	vbl_cnt			; animation speed based on vbl frame counter
+		and	#$03
+		bne	flag_aext
+
+flg_frame	lda	#0
+		asl	@
+		asl	@
+		asl	@
+		asl	@
+		tax
+
+		lda	flg_seq+0,x		; copy active frame of animation to screen memory
+		sta	flg_scr+$000
+		lda	flg_seq+1,x
+		sta	flg_scr+$001
+
+		lda	flg_seq+2,x
+		sta	flg_scr+$100
+		lda	flg_seq+3,x
+		sta	flg_scr+$101
+
+		lda	flg_seq+4,x
+		sta	flg_scr+$200
+		lda	flg_seq+5,x
+		sta	flg_scr+$201
+
+		lda	flg_seq+6,x
+		sta	flg_scr+$300
+		lda	flg_seq+7,x
+		sta	flg_scr+$301
+
+		lda	flg_seq+8,x
+		sta	flg_scr+$400
+		lda	flg_seq+9,x
+		sta	flg_scr+$401
+
+		lda	flg_seq+10,x
+		sta	flg_scr+$500
+		lda	flg_seq+11,x
+		sta	flg_scr+$501
+
+		inc	flg_frame+1		; increment frame counter
+		
+		lda	flg_frame+1		; check and restart animation...
+		eor	#$07			; when all phases are played
+		bne	*+5
+		sta	flg_frame+1
+
+flag_aext	rts
+
+flg_seq		icl	'gfx/flag.dta'	
+
+
+; ------------------------------------------------------------------------------
+;
+
+vbl_fou		lda	vbl_cnt		; swap Dl's (interlaced picture)
+		lsr	@
+		lda	#>dl0
+		bcc	*+4
+		lda	#>dl1
+		sta	$d403
+
+		mwa	#dli_fou0 dli_vec
+
+castle_lum	lda	#$00
+		sta	$d017
+		lda	#$00
+		sta	$d018
+		sta	$d01a
+
+		lda	#$87		; setup PMG colors
+		sta	$d012
+		sta	$d014
+		lda	#$88
+		sta	$d013
+		sta	$d015
+
+		lda	#$00		; minimal size of players and missiles
+		sta	$d008
+		sta	$d009
+		sta	$d00a
+		sta	$d00b
+		sta	$d00c
+
+		clc
+pmg_xpos	lda	#$00
+		sta	$d000
+		sta	$d001
+		adc	#8
+		sta	$d002
+		sta	$d003
+		adc	#8
+		sta	$d006
+		sta	$d007
+		adc	#2
+		sta	$d004
+		sta	$d005
+
+		rts
+
+; DLI for sprite size/position switch
+
+dli_fou0	pha
+
+		lda	#$ff
+		sta	$d008
+		sta	$d009
+		sta	$d00a
+		sta	$d00b
+		sta	$d00c
+
+		lda	#$80
+		sta	$d012
+		sta	$d013
+		sta	$d014
+		sta	$d015
+
+		clc
+		lda	#$30
+		sta	$d007
+		adc	#$08
+		sta	$d006
+		adc	#$08
+		sta	$d005
+		adc	#$08
+		sta	$d004
+		adc	#$08
+		sta	$d000
+		adc	#$20
+		sta	$d001
+		adc	#$20
+		sta	$d002
+		adc	#$20
+		sta	$d003
+		adc	#$20
+	
+		mwa	#dli_fou1 dli_vec
+		pla
+		rti
+
+; DLI for ocean flor
+
+dli_fou1	sta	reg_A
+		stx	reg_X
+		sty	reg_Y
+
+		ldx	#$07
+
+		sta	$d40a
+:21		nop
+
+dll		lda	#$00
+		sta	$d01a
+:4		nop
+		lda	wtr_rgt+1,x
+		sta	$d01a
+
+:3		lda	wtr_lft,x
+		sta	$d01a
+		bit	$00
+:1		nop
+		lda	#0
+		sta	$d01a
+		bit	$00
+:4		nop
+
+		dex
+		bpl	dll
+
+		lda	#$80
+		sta	$d01a
+
+		mwa	#dli_fou2 dli_vec
+
+		lda	reg_A
+		ldx	reg_X
+		ldy	reg_Y
+		rti
+
+wtr_lft :9	dta	0
+wtr_rgt	:9	dta	0
+
+; DLI for gfx mode change
+
+dli_fou2	pha
+
+		sta	$d40a
+sea_lum0	lda	#$80		; $84
+		sta	$d016
+sea_lum1	lda	#$80		; $88
+		sta	$d017
+sea_lum2	lda	#$80		; $8c
+		sta	$d018
+		lda	#$80		; $80
+		sta	$d01a
+
+		pla
+		rti
+		
+
+; ------------------------------------------------------------------------------
+;
+; effect main code
+;
+
+fountain	lda	$d40b
+		bne	*-3
+		sta	$d400
+
+		ldx	#$08
+		lda	#$00
+fou_blk		sta	$d012,x
+		dex
+		bpl	fou_blk
+
+		jsr	fou_make_luts
+		jsr	fou_make_dl
+		jsr	fou_clr_mem
+		jsr	fou_make_snk
+		jsr	fou_make_castle
+		jsr	part_code_gen
+		jsr	make_skip_tbl
+
+		jsr	pmg_init
+		ldy	#16
+		jsr	pmg_set_ypos
+
+		jsr	wait_vsync
+
+		mwa	#vbl_fou vbl_vec
+		mwa	#dli_fou0 dli_vec
+		mwa	#dl0 $d402
+		dec	$d40e
+
+		jsr	pmg_enable
+
+
+moon_rising	jsr	wait_vsync
+		jsr	water_anim
+		jsr	flag_anim
+
+		clc
+moon_adc	lda	#$00
+		adc	#$a0		; $28
+		sta	moon_adc+1
+		bcc	moon_skp0
+
+moon_xpos	lda	#0
+		jsr	pmg_set_xpos
+
+		lda	moon_xpos+1
+		cmp	#50			; final moon position
+;		bcs	moon_skp0
+		bcs	*+5
+		inc	moon_xpos+1
+
+;		cmp	#20			; moon position when light comes up
+;		bcc	moon_skp0
+
+		clc
+castle_adc	lda	#$00
+		adc	#$40
+		sta	castle_adc+1
+		bcc	moon_skp0
+
+		lda	castle_lum+1
+		cmp	#$0e
+		bcs	moon_skp0
+		adc	#2
+		sta	castle_lum+1
+
+
+		lda	sea_lum0+1
+		cmp	#$84
+		bcs	*+4
+		adc	#2
+		sta	sea_lum0+1	
+
+		lda	sea_lum1+1
+		cmp	#$88
+		bcs	*+4
+		adc	#2
+		sta	sea_lum1+1	
+
+		lda	sea_lum2+1
+		cmp	#$8c
+		bcs	*+4
+		adc	#2
+		sta	sea_lum2+1	
+
+moon_skp0	lda	castle_lum+1
+;		cmp	#$0f
+;		bcc	moon_rising
+
+		lda	msx_frame_cnt		; sync with music!
+		cmp	#<$5c0
+		lda	msx_frame_cnt+1
+		sbc	#>$5c0
+		bcc	moon_rising
+
+
+fou_loop	lda	#$4c
+		cmp	$d40b
+		bne	*-3
+		sta	$d40a
+
+		lda	msx_frame_cnt
+		cmp	#$40
+		lda	msx_frame_cnt+1
+		sbc	#$04
+		bcc	fou_not_yet
+
+		lda	EXT_MEM_CODE		; set EXT memory bank with auto-generated code
+		sta	$d301
+		lda	#$00			; clear lo-byte of scr ptr.
+		sta	ad0
+		jsr	part_code_dst		; and call the cls/draw code (screen is cleared with A reg. value)
+
+fou_not_yet	jsr	water_anim		; render the PMG wave animation
+		jsr	flag_anim
+
+		ift	1
+		ldx	$d20a			; re-randomize RND lut
+rep_rnd		lda	$d20a
+		and	#$1f
+		cmp	#$16
+		bcs	rep_rnd
+		adc	#1
+		sta	p_rnd_lut,y
+		eif
+
+		ift	WAIT_FOR_KEY
+
+		lda	$d20f
+		and	#$08
+		bne	*+5
+		sta	key_pressed+1
+
+		eif
+
+		lda	msx_frame_cnt
+		cmp	#$40
+		lda	msx_frame_cnt+1
+		sbc	#$07
+		bcc	fou_noe
+
+		ift	WAIT_FOR_KEY
+
+		ift	TCR_DISPLAY
+		ldx	#3
+tcr_upd		lda	tcr_info,x
+		ora	#$40
+		sta	tcr_info,x
+		dex
+		bpl	tcr_upd
+		eif
+
+key_pressed	lda	#1
+		bne	fou_noe
+
+		eif
+
+; decrement number of particles rendered
+
+fou_adv_l	ldx	#0
+		lda	skip_table_lo,x
+		sta	ad1
+		lda	skip_table_hi,x
+		sta	ad1+1
+
+		lda	EXT_MEM_CODE
+		sta	$d301
+
+		ldy	#$00
+		lda	#$60
+		sta	(ad1),y
+
+		lda	fou_adv_l+1
+		cmp	#[NUM_PARTICLES-1]
+		bcs	*+5
+		inc	fou_adv_l+1
+
+fou_noe
+
+; moon fall
+
+		lda	fou_adv_l+1
+		cmp	#[NUM_PARTICLES-150]
+		bcc	moonf_skp0
+
+		clc
+moonf_adc	lda	#$00
+		adc	#$48		; $28
+		sta	moonf_adc+1
+		bcc	moonf_skp0
+
+moonf_xpos	lda	#49
+		jsr	pmg_set_xpos
+
+		lda	moonf_xpos+1
+		beq	moonf_skp0
+		dec	moonf_xpos+1
+
+		cmp	#20
+		bcc	moonf_skp0
+
+		clc
+castlef_adc	lda	#$00
+		adc	#$80
+		sta	castlef_adc+1
+		bcc	moonf_skp0
+
+		lda	castle_lum+1
+		beq	moonf_skp0
+		dec	castle_lum+1
+
+		lda	sea_lum0+1
+		and	#$0f
+		beq	*+5
+		dec	sea_lum0+1	
+
+		lda	sea_lum1+1
+		and	#$0f
+		beq	*+5
+		dec	sea_lum1+1	
+
+		lda	sea_lum2+1
+		and	#$0f
+		beq	*+5
+		dec	sea_lum2+1	
+
+moonf_skp0	lda	moonf_xpos+1
+		jne	fou_loop
+
+		jsr	wait_vsync
+		lda	#$00
+		sta	$d400
+
+		lda	#$fe
+		sta	$d301
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; code generator for clear the particles
+;
+
+part_era_cgen	ldx	#NUM_PARTICLES
+		ldy	#$00
+
+pera_lp0	lda	#$8d
+		jsr	put_ad0
+		lda	#$00
+		jsr	put_ad0
+		lda	#$00
+		jsr	put_ad0
+
+		dex
+		bne	pera_lp0
+
+		rts
+
+put_ad0		sta	(ad0),y
+		inc	ad0
+		bne	*+4
+		inc	ad0+1
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; code generator for particle calculation
+;
+
+part_code_gen	lda	#NUM_PARTICLES
+		sta	loop_cnt
+
+		mwa	#part_code_dst ad0
+
+		lda	$d301
+		pha
+		lda	EXT_MEM_CODE
+		sta	$d301
+
+		jsr	part_era_cgen
+
+pcg_lp0		ldy	#[part_code_len-1]
+
+pcg_lp1		lda	part_code_load,y
+		sta	(ad0),y
+		dey
+		bpl	pcg_lp1
+
+		lda	#[part_code_len]
+		clc				; advance block address
+		adc	ad0
+		sta	ad0
+		bcc	*+4
+		inc	ad0+1
+
+		ldy	#[rel_loc_len-1]
+
+pcg_lp2		ldx	rel_loc,y
+				
+		lda	part_code_load,x
+		clc
+		adc	#[part_code_len]
+		sta	part_code_load,x
+		bcc	*+5
+		inc	part_code_load+1,x
+
+		dey
+		bpl	pcg_lp2
+
+		ldx	#<[p_mod_cll+1]
+		jsr	rel_cls
+
+		ldx	#<[p_mod_clh+1]
+		jsr	rel_cls
+
+		lda	part_code_load+p_mod6
+		eor	#$20			; change INC/DEC in every PASS of code generator
+		sta	part_code_load+p_mod6
+
+pcg_skp		dec	loop_cnt
+		bne	pcg_lp0
+
+		ldy	#$00
+		lda	#$60
+		sta	(ad0),y
+
+		pla
+		sta	$d301
+		rts
+
+rel_cls		clc
+		lda	#3
+		adc	part_code_load,x
+		sta	part_code_load,x
+		bcc	*+5
+		inc	part_code_load+1,x
+		rts
+
+; relocation tables for self modifying code
+
+rel_loc		dta	l(p_mod0+1),l(p_mod1+1),l(p_mod2+1),l(p_mod3+1)
+		dta	l(p_mod4+1),l(p_mod5+1),l(p_mod6+1),l(p_mod7+1)
+		dta	l(p_mod8+1)
+
+rel_loc_len	equ	*-rel_loc
+
+part_code_load
+		org	r:[part_code_dst+3*NUM_PARTICLES]
+
+part_code_start	clc
+p_ypos		lda     #0
+p_yadc		adc	#1
+
+p_mod0		equ	*-part_code_start
+		sta	p_ypos+1
+		bne	p_yok
+
+p_new		ldx	$d20a
+		ldy	p_rnd_lut,x
+p_mod1		equ	*-part_code_start
+		sty	p_yadc+1
+p_mod2		equ	*-part_code_start
+		sta	p_xpos+1
+p_mod3		equ	*-part_code_start
+		sta	p_ypos+1
+		lda	$d20a
+p_mod7		equ	*-part_code_start
+		sta	p_rrem+1
+p_mod8		equ	*-part_code_start
+		jmp	p_nxt
+
+p_yok
+p_mod4		equ	*-part_code_start
+		dec	p_yadc+1
+		lsr	@
+		lsr	@
+		sta	scr_ptr+1
+p_mod_clh	equ	*-part_code_start
+		sta	part_code_dst+2		; store HI-byte of pixel address in CLS routine
+
+p_xrem		lda	#$00
+p_rrem		adc	#$ff
+p_mod5		equ	*-part_code_start
+		sta	p_xrem+1
+		bcc	*+5
+p_mod6		equ	*-part_code_start
+		inc	p_xpos+1
+
+p_xpos		ldx	#$00
+		ldy	p_xdv_lut,x
+p_mod_cll	equ	*-part_code_start
+		sty	part_code_dst+1		; store LO-byte of pixel address in CLS routine
+
+p_plot		lda	(scr_ptr),y
+		ora	p_bit_lut,x
+		sta	(scr_ptr),y
+
+p_nxt		equ	*
+
+part_code_len	equ	*-part_code_start
+
+		; restore origin
+		org	*-part_code_start+part_code_load

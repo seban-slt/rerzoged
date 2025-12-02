@@ -1,0 +1,905 @@
+PLZM_RASTIME	equ	0
+XMS_LUT_BANK_P	equ	[banks+0]
+
+; virtual sprite positions
+
+
+spr0_pos	equ	plzm_dli?spr0_u-1
+spr1_pos	equ	plzm_vbl?spr1_u+1
+spr2_pos	equ	plzm_vbl?spr2_u+1
+spr3_pos	equ	plzm_vbl?spr3_u+1
+spr4_pos	equ	plzm_dli?spr0_u+4
+
+spr9_pos	equ	plzm_dli3?spr0_b-1
+spr6_pos	equ	plzm_dli2?spr1_b+1
+spr7_pos	equ	plzm_dli2?spr2_b+1
+spr8_pos	equ	plzm_dli2?spr3_b+1
+spr5_pos	equ	plzm_dli3?spr0_b+4
+
+; defines
+
+plz_logo_a	equ	$c000
+
+plazm_dl_fx1	equ	dl0		; org	*+$100
+plazm_dl_fx2	equ	dl1		; org	*+$100
+
+plazm_dl	equ	free_pg2	; org	*+$100
+line_n		equ	free_pg3	; org	*+$100
+line_d		equ	free_pg4	; org	*+$100
+
+plazm_ctab	equ	free_pg5	; org	*+$100		; color array
+plazm_stab	equ	free_pg6	; org	*+$100		; shift array
+
+dl_adr_lo	equ	free_pg7	; org	*+$80		; DL mod adr. lo
+dl_adr_hi	equ	free_pg7+$80	; org	*+$80		; DL mod adr. hi
+
+col_lut		equ	free_pg8	; org	*+$100		; color LUT
+hsc_lut		equ	free_pg9	; org	*+$100		; h-scr LUT
+
+plzm_sine	equ	free_pga	; sine table copied from XMS
+
+; ------------------------------------------------------------------------------
+;
+; plazma calculation
+
+plzm_code_load	equ	*
+		org	r:plzm_zp_loc
+plzm_code_zp
+
+plasma_calc	ldy	#$00
+
+plz_sx1		lda	#0
+		sta	z:plz_dx1+1
+plz_sx2		lda	#0
+		sta	z:plz_dx2+1
+
+plzm_loop	clc
+
+plz_dx1		lda	plzm_sine
+plz_dx2		adc	plzm_sine
+		tax
+
+; update color lut table
+
+plasma_clut	lda	col_lut,x		; update color table
+		sta	plazm_ctab,y
+
+		lda	hsc_lut,x		; update horzontal scroll table
+		sta	plazm_stab,y
+
+		txa
+		lsr	@
+		lsr	@
+
+		ldx	dl_adr_lo,y
+		stx	z:?dl_adr_upd+1
+		ldx	dl_adr_hi,y
+		stx	z:?dl_adr_upd+2
+?dl_adr_upd	sta	$ffff
+
+		clc
+plz_adc_x1	lda	#0
+		adc	z:plz_dx1+1
+		sta	z:plz_dx1+1
+
+		clc
+plz_adc_x2	lda	#0
+		adc	z:plz_dx2+1
+		sta	z:plz_dx2+1
+
+		iny
+		bpl	plzm_loop
+
+		clc
+plz_spd_x1	lda	#0
+		adc	z:plz_sx1+1
+		sta	z:plz_sx1+1
+
+		clc
+plz_spd_x2	lda	#0
+		adc	z:plz_sx2+1
+		sta	z:plz_sx2+1
+
+		rts
+
+plad		dta	$00,$00
+		
+		ert	*>$80
+
+plzm_code_len	equ	*-plzm_code_zp
+
+		org	[plzm_code_load+plzm_code_len]
+
+; copy
+
+plzm_copy_zp	ldx	#[plzm_code_len-1]
+
+?clp0		lda	plzm_code_load,x
+		sta	plzm_zp_loc,X
+		dex
+		bpl	?clp0
+
+		rts
+
+plzm_sine_xms	lda	$d301
+		pha
+		lda	XMS_LUT_BANK_P
+		sta	$d301
+
+		ldx	#0
+
+?lp0		lda	xms_plzm_sine,x
+		sta	plzm_sine,x
+
+		inx
+		bne	?lp0
+
+		pla
+		sta	$d301
+		rts
+
+lut_n		dta	$01,$23,$45,$67,$89,$ab,$cd,$ef,$ed,$cb,$a9,$87,$65,$43,$21
+
+lut_d		dta	$11,$22,$33,$44,$55,$66,$77,$88,$99,$aa,$bb,$cc,$dd,$ee,$ff
+		dta	$ee,$dd,$cc,$bb,$aa,$99,$88,$77,$66,$55,$44,$33,$22,$11,$00
+
+; sprite masking LUT's - nibble packed!
+
+hid_plr0_ulbl	dta	$3B,$3B,$3B,$3B,$3B,$3B,$3B,$3B,$3B,$3B,$2C,$00
+hid_plr1_ulbl 	dta	$59,$59,$59,$59,$59,$59,$59,$59,$4A,$00,$00,$00
+hid_plr2_ulbl 	dta	$77,$77,$77,$77,$77,$77,$68,$00,$00,$00,$00,$00
+hid_plr3_ulbl 	dta	$95,$95,$95,$95,$86,$00,$00,$00,$00,$00,$00,$00
+hid_plr4_ulbl 	dta	$B3,$B3,$A4,$00,$00,$00,$00,$00,$00,$00,$00,$00
+
+hid_plr0_urbr	dta	$3B,$3B,$4A,$00,$00,$00,$00,$00,$00,$00,$00,$00
+hid_plr1_urbr	dta	$59,$59,$59,$59,$59,$68,$00,$00,$00,$00,$00,$00
+hid_plr2_urbr	dta	$77,$77,$77,$77,$77,$77,$68,$00,$00,$00,$00,$00
+hid_plr3_urbr	dta	$95,$95,$95,$95,$95,$95,$95,$95,$A4,$00,$00,$00
+hid_plr4_urbr	dta	$B3,$B3,$B3,$B3,$B3,$B3,$B3,$B3,$B3,$B3,$C2,$00
+
+; include parameter sets
+
+		icl	'params_splazma.xsm'
+
+plz_val		dta	0,0,0,0
+plz_idx		dta	$00
+plzm_tmr	brk
+upd_spr_t	brk
+grtx_tmr	brk
+grtx_loop_cnt	dta	47
+
+
+
+plzm_load_e	txa
+		pha
+		tya
+		pha
+
+		ldx	plz_idx
+
+		lda	#$00
+		sta	plz_sx1+1
+		sta	plz_sx2+1
+
+		lda	plz_adcx1,x
+		sta	plz_val
+		lda	plz_adcx2,x
+		sta	plz_val+1
+
+		lda	plz_spdx1,x
+		sta	plz_val+2
+		lda	plz_spdx2,x
+		sta	plz_val+3
+		
+		lda	plz_clut,x
+		cmp	line_n
+		beq	*+5
+		jsr	plzm_line_swap
+	
+		jsr	plzm_par_copy
+	
+		inc	plz_idx
+		lda	plz_idx
+		eor	#[plz_adcx2-plz_adcx1]
+		bne	*+5
+		sta	plz_idx
+
+		pla
+		tay
+		pla
+		tax
+		rts
+
+; copy parameters to zp-code
+
+plzm_par_copy	lda	plz_val
+		sta	plz_adc_x1+1
+		
+		lda	plz_val+1
+		sta	plz_adc_x2+1
+
+		lda	plz_val+2
+		sta	plz_spd_x1+1
+
+		lda	plz_val+3
+		sta	plz_spd_x2+1
+
+		rts
+
+
+; swap line buffers
+
+plzm_line_swap	ldx	#0
+?nxt_swp	lda	line_d,x
+		pha
+		lda	line_n,x
+		sta	line_d,x
+		pla
+		sta	line_n,x
+		inx
+		bne	?nxt_swp
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; make line shape from LUT
+;
+
+make_ln_lut	ldx	#0
+		ldy	#0
+
+?lp0		lda	lut_n,y
+		sta	line_n,x
+
+		iny			; next byte from lut
+		cpy	#15		; LUT len is 15 bytes
+		bcc	*+4
+		ldy	#$00
+
+		inx
+		bne	?lp0
+
+		ldy	#0
+
+?lp1		lda	lut_d,y
+		sta	line_d,x
+
+		iny			; next byte from lut
+		cpy	#30		; LUT len is 15 bytes
+		bcc	*+4
+		ldy	#$00
+
+		inx
+		bne	?lp1
+
+; make color lut (skip shades of grey)
+
+		ldx	#0
+?lp2		txa
+		and	#$f0
+		bne	*+4
+		lda	#$10
+		sta	col_lut,x
+
+		txa
+		and	#$02
+		eor	#$02
+		sta	hsc_lut,x
+
+		inx
+		bne	?lp2
+
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; makes address LUT for Display List updates
+;
+
+plz_make_dlad	ldx	#0
+
+		mwa	#[plazm_dl_fx1+1] plad
+
+?lp0		lda	plad+0
+		sta	dl_adr_lo,x
+		lda	plad+1
+		sta	dl_adr_hi,x
+
+		jsr	?inc_adr
+
+		inx
+		cpx	#$40
+		bcc	?lp0
+
+		mwa	#[plazm_dl_fx2+1] plad
+
+?lp1		lda	plad+0
+		sta	dl_adr_lo,x
+		lda	plad+1
+		sta	dl_adr_hi,x
+
+		jsr	?inc_adr
+
+		inx
+		bpl	?lp1
+
+?inc_adr	clc
+		lda	#$03
+		adc	plad+0
+		sta	plad+0
+		bcc	*+4
+		inc	plad+1
+		rts
+
+
+; ------------------------------------------------------------------------------
+;
+; makes display list
+;
+
+plz_make_dl	ldx	#3
+		lda	#$70
+		jsr	?put_dl
+		
+		lda	#$80			; DLI (change to GTIA mode)
+		jsr	?put_dl
+
+		lda	#$01
+		jsr	?put_dl
+		lda	#<plazm_dl_fx1
+		jsr	?put_dl
+		lda	#>plazm_dl_fx1
+		jsr	?put_dl
+
+		ldx	?put_dl+1
+		ldy	?put_dl+2
+		jsr	plz_mk_dl_fx1
+
+		ldx	#1
+		lda	#$10			; +2 empty lines for better composition
+		jsr	?put_dl
+
+		lda	#$cf
+		jsr	?put_dl
+		lda	#<plz_logo_a
+		jsr	?put_dl
+		lda	#>plz_logo_a
+		jsr	?put_dl
+
+		ldx	#30
+		lda	#$0f
+		jsr	?put_dl
+		lda	#$8f
+		jsr	?put_dl
+		ldx	#7
+		lda	#$0f
+		jsr	?put_dl
+
+		lda	#$10			; +2 empty lines for better composition
+		jsr	?put_dl
+
+
+		lda	#$80			; DLI (change to GTIA mode)
+		jsr	?put_dl
+		lda	#$01
+		jsr	?put_dl
+		lda	#<plazm_dl_fx2
+		jsr	?put_dl
+		lda	#>plazm_dl_fx2
+		jsr	?put_dl
+
+		ldx	?put_dl+1
+		ldy	?put_dl+2
+		jsr	plz_mk_dl_fx2
+
+
+		ift	TCR_DISPLAY
+
+		lda	#$c2
+		sta	$d016
+
+		ldx	#$01
+		lda	#$46
+		jsr	?put_dl
+		lda	#<tcr_info
+		jsr	?put_dl
+		lda	#>tcr_info
+		jsr	?put_dl
+	
+		eif
+
+
+		ldx	#1
+		lda	#$41
+		jsr	?put_dl
+		lda	#<plazm_dl
+		jsr	?put_dl
+		lda	#>plazm_dl
+;		jmp	?put_dl			; not needed when put_dl is below
+
+?put_dl		sta	plazm_dl
+		inw	?put_dl+1
+		dex
+		bne	?put_dl
+		inx
+		rts
+
+plz_mk_dl_fx1	tya
+		pha
+		txa
+		pha
+
+		ldx	#64
+		ldy	#0		
+
+?lp1		lda	#$5f			; LMS + HSCROLL
+		jsr	?put_fx1
+		lda	#<line_n
+		jsr	?put_fx1
+		lda	#>line_n
+		jsr	?put_fx1
+		dex
+		bne	?lp1
+
+		lda	#$01
+		jsr	?put_fx1
+		pla
+		jsr	?put_fx1
+		pla
+;		jmp	?put_fx1		; not needed ...
+
+?put_fx1	sta	plazm_dl_fx1,y
+		iny
+		rts
+
+plz_mk_dl_fx2	tya
+		pha
+		txa
+		pha
+
+		ldx	#64
+		ldy	#0		
+
+?lp1		lda	#$5f			; LMS + HSCROLL
+		jsr	?put_fx2
+		lda	#<line_n
+		jsr	?put_fx2
+		lda	#>line_n
+		jsr	?put_fx2
+		dex
+		bne	?lp1
+
+		lda	#$01
+		jsr	?put_fx2
+		pla
+		jsr	?put_fx2
+		pla
+;		jmp	?put_fx2		; not needed ...
+
+?put_fx2	sta	plazm_dl_fx2,y
+		iny
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; NMI routines
+;
+
+plzm_vbl	mwa	#plazm_dl $d402
+		mwa	#plzm_dli dli_vec
+		lda	#$00
+		sta	$d017
+		sta	$d018
+
+?spr1_u		lda	#$00		; upadte non-multiplexed sprite positions
+		sta	$d001
+?spr2_u		lda	#$00
+		sta	$d002
+?spr3_u		lda	#$00
+		sta	$d003
+
+		lda	plzm_tmr	; switch curtain mode 
+		cmp	#$60
+		bne	?skp_chg
+		lda	#[12*5]
+		eor	upd_spr_t
+		sta	upd_spr_t
+
+?skp_chg	lda	plzm_tmr	; hide the plazma
+		cmp	#12
+		bcs	?skp_hide
+		clc
+		adc	upd_spr_t
+		tax
+		jsr	v_spr_upd
+		jmp	?skp_unhide
+
+?skp_hide	lda	plzm_tmr	; un-hide plazma 
+		cmp	#$b5
+		bcc	?skp_unhide
+		sbc	#$b5
+		eor	#$ff
+		clc
+		adc	#12
+
+		clc
+		adc	upd_spr_t
+		tax
+
+		jsr	v_spr_upd
+?skp_unhide
+
+
+?plzm_ena	lda	#$00
+		beq	*+5
+		jsr	plasma_calc
+
+		lda	plzm_tmr
+		beq	*+5
+		dec	plzm_tmr
+
+		lda	grtx_tmr
+		beq	*+5
+		dec	grtx_tmr
+		rts
+
+v_spr_upd	lda	hid_plr0_ulbl,x
+		and	#$f0
+		sta	spr0_pos
+
+		lda	hid_plr1_ulbl,x
+		and	#$f0
+		sta	spr1_pos
+
+		lda	hid_plr2_ulbl,x
+		and	#$f0
+		sta	spr2_pos
+
+		lda	hid_plr3_ulbl,x
+		and	#$f0
+		sta	spr3_pos
+
+		lda	hid_plr4_ulbl,x
+		and	#$f0
+		sta	spr4_pos
+
+ 		lda	hid_plr0_ulbl,x
+:4		asl	@
+		sta	spr5_pos
+
+ 		lda	hid_plr1_ulbl,x
+:4		asl	@
+		sta	spr6_pos
+
+ 		lda	hid_plr2_ulbl,x
+:4		asl	@
+		sta	spr7_pos
+
+ 		lda	hid_plr3_ulbl,x
+:4		asl	@
+		sta	spr8_pos
+
+ 		lda	hid_plr4_ulbl,x
+:4		asl	@
+		sta	spr9_pos
+
+ 		rts
+
+plzm_dli	sta	?plzm_A+1
+		stx	?plzm_X+1
+		sty	?plzm_Y+1
+
+		lda	#$40
+		sta	$d01b
+		sta	$d40a
+
+		ldx	#0
+?dlp0		lda	plazm_ctab,x
+		ldy	plazm_stab,x
+		sta	$d40a
+		sta	$d01a
+		sty	$d404
+		lda	#$00
+?spr0_u		sta	$d000
+		lda	#$00
+		nop
+		nop
+		nop
+		nop
+?spr4_u		sta	$d000
+		inx
+		cpx	#64
+		bcc	?dlp0
+
+		lda	#$00
+		sta	$d40a
+		sta	$d01a
+		sta	$d01b
+
+		mwa	#plzm_dli1 dli_vec
+
+?plzm_A		lda	#0
+?plzm_X		ldx	#0
+?plzm_Y		ldy	#0
+		rti
+
+plzm_dli1	sta	?plzm_A+1
+		stx	?plzm_X+1
+
+		ldx	#2
+?grad		stx	$d40a
+		stx	$d017
+		inx
+		inx
+		cpx	#16
+		bcc	?grad
+		
+		mwa	#plzm_dli2 dli_vec
+
+?plzm_A		lda	#0
+?plzm_X		ldx	#0
+		rti
+
+plzm_dli2	sta	?plzm_A+1
+		stx	?plzm_X+1
+
+		ldx	#14
+?grad		stx	$d40a
+		stx	$d017
+		dex
+		dex
+		bne	?grad
+		
+		mwa	#plzm_dli3 dli_vec
+
+?spr1_b		lda	#$00
+		sta	$d001
+?spr2_b		lda	#$00
+		sta	$d002
+?spr3_b		lda	#$00
+		sta	$d003
+
+?plzm_A		lda	#0
+?plzm_X		ldx	#0
+		rti
+
+plzm_dli3	sta	?plzm_A+1
+		stx	?plzm_X+1
+		sty	?plzm_Y+1
+
+		lda	#$40
+		sta	$d01b
+		sta	$d40a
+
+		ldx	#$40
+?dlp0		lda	plazm_ctab,x
+		ldy	plazm_stab,x
+		sta	$d40a
+		sta	$d01a
+		sty	$d404
+
+		lda	#$00
+?spr0_b		sta	$d000
+		lda	#$00
+		nop
+		nop
+		nop
+		nop
+?spr4_b		sta	$d000
+
+		inx
+		cpx	#128
+		bcc	?dlp0
+
+		lda	#$00
+		sta	$d40a
+		sta	$d01a
+		sta	$d01b
+
+?plzm_A		lda	#0
+?plzm_X		ldx	#0
+?plzm_Y		ldy	#0
+		rti
+
+; ------------------------------------------------------------------------------
+;
+; plazma code start here
+;
+
+s_plazma	jsr	wait_vsync
+		lda	#$00
+		sta	$d400
+		lda	#$fe
+		sta	$d301
+
+		jsr	prnt_depack_fnt
+		jsr	prnt_make_lut
+		jsr	prnt_cls
+
+		jsr	make_ln_lut
+		jsr	plz_make_dl
+		jsr	plz_make_dlad
+		jsr	plzm_sine_xms
+		jsr	plzm_copy_zp
+
+		mwa	#plzm_vbl vbl_vec
+		mwa	#plzm_dli dli_vec
+
+		ldx	#$09
+?set_lp		lda	#$ff		; PMG size = max
+		sta	$d008,x
+		lda 	#$00
+		cpx	#$04
+		bcs	?skp_clr
+		sta	$d012,x
+?skp_clr	dex
+		bpl	?set_lp
+		sta	$d01d		; DMA for PMG off
+
+		lda	#$20		; two missiles on the left
+		sta	$d004
+		lda	#$28
+		sta	$d005
+
+		lda	#$d0		; two missiles on the right
+		sta	$d006
+		lda	#$d8
+		sta	$d007
+
+
+; load initial plazma setup
+
+		lda	#0
+		sta	plz_idx
+		jsr	plzm_load_e
+		jsr	plasma_calc
+
+		ldx	#<$840
+		ldy	#>$840
+		jsr	wait4frame
+
+		lda	#$22
+		sta	$d400
+		dec	$d40e
+		inc	plzm_vbl?plzm_ena+1
+
+		ldx	#11		; turn off sprite masking!
+		jsr	v_spr_upd
+
+; initial setup (prints 1st line)
+
+		lda	#[$c0-24]	; setup plazma timer
+		sta	plzm_tmr
+
+		lda	#$30		; setup grtx timer
+		sta	grtx_tmr
+
+		jsr	print_1st	; print 1st message
+
+splazm_lp	jsr	wait_vsync
+
+		lda	plzm_tmr
+		bne	?skp_plzm
+
+		lda	#$c0		; reload plazma timer
+		sta	plzm_tmr
+
+		jsr	plzm_load_e
+		
+?skp_plzm	lda	grtx_tmr
+		bne	?skp_grtx
+		
+		lda	#$30		; reload grtx timer
+		sta	grtx_tmr
+
+		jsr	prnt_cls_hr
+		jsr	print_one
+		
+		dec	grtx_loop_cnt
+
+?skp_grtx	lda	grtx_loop_cnt
+		bne	splazm_lp
+
+		lda	#$2c		; disable sprite effects
+		sta	plzm_dli?spr0_u
+		sta	plzm_dli?spr4_u
+		sta	plzm_dli3?spr0_b
+		sta	plzm_dli3?spr4_b
+		sta	plzm_vbl?spr1_u+2
+		sta	plzm_vbl?spr2_u+2
+		sta	plzm_vbl?spr3_u+2
+		sta	plzm_dli2?spr1_b+2
+		sta	plzm_dli2?spr2_b+2
+		sta	plzm_dli2?spr3_b+2
+
+; do final sprite cortain + color fade out
+
+		ldx	#$50
+
+spr_curt	jsr	wait_vsync
+
+?spr0		lda	#$10		; left side
+		sta	$d000
+		sec
+		sbc	#$20
+		sta	$d001
+		sec
+		sbc	#$08
+		sta	$d004
+		sec
+		sbc	#$08
+		sta	$d005
+
+?spr1		lda	#$d0		; right side
+		sta	$d002
+		clc
+		adc	#$20
+		sta	$d003
+		clc
+		adc	#$20
+		sta	$d006
+		clc
+		adc	#$08
+		sta	$d007
+
+		inc	?spr0+1		; mod. sprite positions
+		dec	?spr1+1
+
+		txa			; erase color LUT
+		asl	@
+		asl	@
+		tay
+		lda	#0
+		sta	col_lut+0,y
+		sta	col_lut+1,y
+		sta	col_lut+2,y
+		sta	col_lut+3,y
+
+		dex
+		bpl	spr_curt
+
+		dec	plzm_vbl?plzm_ena+1	; disable plazma calsulation on VBL
+		jsr	wait_vsync		; wait for VSync
+		lda	#$00
+		sta	$d400
+
+		mwa	#rti_rti dli_vec	; restore default  DLI vector
+		mwa	#rts_rts vbl_vec	; restore default  VBL vector
+
+		lsr	$d40e			; disable DLI!
+
+		ldx	#$07			; clear PMG positions
+?cpmg		lda	#$00
+		sta	$d000,x
+		dex
+		bpl	?cpmg
+
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; print messgages:
+;
+; print_1st (prints 1st msg)
+; print_one (prints next message)
+;
+
+print_one	ldx	prnt_line?msg+1
+		ldy	prnt_line?msg+2
+		bne	print_nxt
+
+print_1st	ldx	#<grtz_list
+		ldy	#>grtz_list
+
+print_nxt	lda	$d301
+		pha
+		lda	XMS_FNT_BANK
+		sta	$d301
+
+		lda	#0
+		sta	pr_ypos
+		jsr	prnt_line
+
+		pla
+		sta	$d301
+		rts

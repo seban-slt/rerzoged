@@ -1,0 +1,48 @@
+grtz_list	dta d'A SALUTE TO:',$ff
+		dta d'0XF',$ff
+		dta d'ABBUC',$ff
+		dta d'A.GILMORE',$ff
+		dta d'AGENDA',$ff
+		dta d'ALTAIR',$ff
+		dta d'ARISE',$ff
+		dta d'BAC',$ff
+		dta d'BEWU',$ff
+		dta d'BLOWJOBB',$ff
+		dta d'BLASPH',$ff
+		dta d'- BB -',$ff
+		dta d'CANDLE',$ff
+		dta d'COBRA',$ff
+		dta d'DESIRE',$ff
+		dta d'DMSC',$ff
+		dta d'ELECTRON',$ff
+		dta d'ERU',$ff
+		dta d'F#READY',$ff
+		dta d'GREG',$ff
+		dta d'I.V.P.',$ff
+		dta d'JAC',$ff
+		dta d'J.HUSAK',$ff
+		dta d'JASKIER',$ff
+		dta d'KOALA',$ff
+		dta d'LAMERS',$ff
+		dta d'- LR -',$ff
+		dta d'LISU',$ff
+		dta d'MIKER',$ff
+		dta d'MIKEY',$ff
+		dta d'- MB -',$ff
+		dta d'MEC',$ff
+		dta d'MADTEAM',$ff
+		dta d'- NG -',$ff
+		dta d'OUR 5OFT',$ff
+		dta d'OXYRON',$ff
+		dta d'PHAREON',$ff
+		dta d'RADIANCE',$ff
+		dta d'RIPEK',$ff
+		dta d'SHADOWS',$ff
+		dta d'SLAVES',$ff
+		dta d'SV TEAM',$ff
+		dta d'SWORD',$ff
+		dta d'TAQUART',$ff
+		dta d'TRISTESSE',$ff
+		dta d'VINSCOOL',$ff
+		dta d'ZELAX',$ff
+		dta d' ',$ff

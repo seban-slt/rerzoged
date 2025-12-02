@@ -1,0 +1,1355 @@
+PRNT_STANDALONE	equ	0		; if true standalone test mode is activated
+
+PRNT_Y_ADD	equ	40		; Y step size in pixels	
+PRNT_X_ADJ	equ	4
+
+PRNT_BPS	equ	40		; bytes per line!
+
+XMS_FNT_BANK	equ	[banks+3]
+
+fnt_xry_adr	equ	$4000		; font location in XMS bank
+fnt_xtl_adr	equ	$6000		; font address location in XMS bank
+
+; ------------------------------------------------------------------------------
+;
+; proportional font drawing routines
+;
+; font grid 32x40 px
+;
+		ift	PRNT_STANDALONE
+		org	$80
+
+prn_ad0		org	*+2
+prn_ad1		org	*+2
+prn_ad2		org	*+2
+
+pr_xpos		org	*+2
+pr_ypos		org	*+1
+pr_char		org	*+1
+
+pr_chr_idx	org	*+1
+pr_pxl_cnt	org	*+2
+
+pr_lsr_buf	org	*+5
+
+		ert	*>$80
+
+		eif
+
+		ift	!PRNT_STANDALONE
+
+prn_ad0		equ	prtn_zp_loc+0		; 2
+prn_ad1		equ	prtn_zp_loc+2		; 2
+prn_ad2		equ	prtn_zp_loc+4		; 2
+
+pr_xpos		equ	prtn_zp_loc+6		; 2
+pr_ypos		equ	prtn_zp_loc+8		; 1
+pr_char		equ	prtn_zp_loc+9		; 1
+
+pr_chr_idx	equ	prtn_zp_loc+10		; 1
+pr_pxl_cnt	equ	prtn_zp_loc+11		; 2
+
+pr_lsr_buf	equ	prtn_zp_loc+13		; 5
+pr_max_luma	equ	prtn_zp_loc+18		; 1
+
+pr_free		equ	prtn_zp_loc+19
+
+		ert	pr_free>plzm_zp_loc
+
+prnt_dl		equ	free_pg2
+logo_dl0	equ	dl0
+logo_dl1	equ	dl1
+prnt_scr	equ	$c000
+prnt_scr_lo	equ	free_pg0
+prnt_scr_hi	equ	free_pg1
+
+gr15_scr_a	equ	$4150
+gr15_scr_b	equ	$6150
+
+		eif		
+
+		ift	PRNT_STANDALONE
+
+prnt_scr	equ	$2150
+
+		org	$8000
+
+prnt_dl		org	*+$100
+prnt_scr_lo	org	*+$100
+prnt_scr_hi	org	*+$100
+
+		icl	'fnt/xr_prop_fnt.icl'
+
+; ------------------------------------------------------------------------------
+;
+; slow down DLI
+;
+
+prnt_dli	pha
+		txa
+		pha
+		tya
+		pha
+
+		lda	#$c4
+		sta	$d40a
+		sta	$d01a
+		lda	#$00
+		sta	$d40a
+		sta	$d01a
+
+		ldx	#$00
+?lp0		txa
+		sta	$d40a
+		inx
+		cpx	#193
+		bne	?lp0
+
+		lda	#$c4
+		sta	$d40a
+		sta	$d01a
+		lda	#$00
+		sta	$d40a
+		sta	$d01a
+
+		pla
+		tay
+		pla
+		tax
+		pla
+		rti
+
+; ------------------------------------------------------------------------------
+;
+; this proc makes test DL
+;
+
+prnt_make_dl	ldx	#$02
+		lda	#$70
+		jsr	prnt_put_dl
+		lda	#$d0
+		jsr	prnt_put_dl
+		lda	#$10
+		jsr	prnt_put_dl
+
+		lda	#$4f
+		jsr	prnt_put_dl
+		lda	#<prnt_scr
+		jsr	prnt_put_dl
+		lda	#>prnt_scr
+		jsr	prnt_put_dl
+
+		ldx	#93
+		lda	#$0f
+		jsr	prnt_put_dl
+
+		lda	#$4f
+		jsr	prnt_put_dl
+		lda	#<[prnt_scr+94*40]
+		jsr	prnt_put_dl
+		lda	#>[prnt_scr+94*40]
+		jsr	prnt_put_dl
+
+		ldx	#97
+		lda	#$0f
+		jsr	prnt_put_dl
+		
+		lda	#$41
+		jsr	prnt_put_dl
+		lda	#<prnt_dl
+		jsr	prnt_put_dl
+		lda	#>prnt_dl
+		jmp	prnt_put_dl
+		rts
+
+		els
+
+prnt_make_dl	mwa	#prnt_dl prnt_put_dl+1
+
+		ift	TCR_DISPLAY
+
+		ldx	#$01
+		lda	#$46
+		jsr	prnt_put_dl
+		lda	#<tcr_info
+		jsr	prnt_put_dl
+		lda	#>tcr_info
+		jsr	prnt_put_dl
+		ldx	#$08
+		els
+		ldx	#$09
+		eif
+
+		lda	#$70
+		jsr	prnt_put_dl
+		lda	#$80
+		jsr	prnt_put_dl
+
+		lda	#$4f
+		jsr	prnt_put_dl
+		lda	#<prnt_scr
+		jsr	prnt_put_dl
+		lda	#>prnt_scr
+		jsr	prnt_put_dl
+
+		ldx	#30
+		lda	#$0f
+		jsr	prnt_put_dl
+		lda	#$8f
+		jsr	prnt_put_dl
+		ldx	#8
+		lda	#$0f
+		jsr	prnt_put_dl
+		
+
+		lda	#$70
+		jsr	prnt_put_dl
+		lda	#$80
+		jsr	prnt_put_dl
+		ldx	#30
+		lda	#$0f
+		jsr	prnt_put_dl
+		lda	#$8f
+		jsr	prnt_put_dl
+		ldx	#9
+		lda	#$0f
+		jsr	prnt_put_dl
+
+		lda	#$41
+		jsr	prnt_put_dl
+		lda	#<prnt_dl
+		jsr	prnt_put_dl
+		lda	#>prnt_dl
+		jmp	prnt_put_dl
+		rts
+
+		eif
+
+prnt_put_dl	sta	prnt_dl
+		inw	prnt_put_dl+1
+		dex
+		bne	prnt_put_dl
+		inx
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; this proc. prepares the needed LUTs
+;
+
+prnt_make_lut	ldx	#0
+
+		mwa	#prnt_scr prn_ad0
+
+?lp0		lda	prn_ad0			; generate line address LUT
+		sta	prnt_scr_lo,x
+		lda	prn_ad0+1
+		sta	prnt_scr_hi,x
+
+		clc
+		lda	#40
+		adc	prn_ad0
+		sta	prn_ad0
+		bcc	*+4
+		inc	prn_ad0+1
+
+?once		cpx	#$40
+		bcs	?ls1
+		
+		lda	#PRNT_X_ADJ		; adjust font size table!
+		adc	xr_fnt_size,x
+		sta	xr_fnt_size,x
+
+?ls1		inx
+		bne	?lp0
+
+		stx	?once+1
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; this proc clear the screen
+;
+
+prnt_cls	mwa	#prnt_scr ?lp0+1
+		
+		ift	PRNT_STANDALONE
+		ldx	#>[40*192]-1
+		els
+		ldx	#>[40*80]
+		eif
+				
+		ldy	#$00
+		tya
+?lp0		sta	prnt_scr,y
+		dey
+		bne	?lp0
+		inc	?lp0+2
+		dex
+		bpl	?lp0
+		rts
+
+
+prnt_cls_hr	ldy	#[40-1]
+
+?cl0		ldx	#[40-1]
+
+		lda	#<prnt_scr
+		sta	prn_ad1
+		lda	#>prnt_scr
+		sta	prn_ad1+1
+
+?cl1		lda	#$00
+		sta	(prn_ad1),y
+
+		clc
+		lda	#40
+		adc	prn_ad1
+		sta	prn_ad1
+		bcc	*+4
+		inc	prn_ad1+1
+
+		dex
+		bpl	?cl1
+
+		dey
+		bpl	?cl0
+	
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; prints one character
+;
+; pr_xpos, pr_ypos -> position
+; reg A. -> character to print
+
+prnt_char	sta	pr_char
+
+		asl	@			; calculate and get address of font shape
+		tax
+		lda	fnt_xtl_adr+0,x
+		sta	prn_ad0
+		lda	fnt_xtl_adr+1,x
+		sta	prn_ad0+1
+
+		lda	pr_xpos+1		; xpos/8 (calculate starting X offset on screen)
+		lsr	@
+		lda	pr_xpos
+		ror	@
+		lsr	@
+		lsr	@
+		sta	?x_ofs+1
+
+		lda	pr_xpos			; calculate the shift
+		and	#$07
+		sta	?x_shift+1
+
+		ldy	pr_ypos			; get address of screen pointer based on Y position
+		lda	prnt_scr_lo,y
+		sta	prn_ad1
+		lda	prnt_scr_hi,y
+		sta	prn_ad1+1
+
+		lda	#0			; clear the character shape index
+		sta	pr_chr_idx
+		
+?ch_cplp	ldx	#0			; clear last byte of shift buffer
+		stx	pr_lsr_buf+4
+
+		ldy	pr_chr_idx
+?lp0		lda	(prn_ad0),y		; copy actual line of char shape to shift buffer 
+		sta	pr_lsr_buf,x
+		iny
+		inx
+		cpx	#4			; finish coping after 4 bytes (32 pixels)
+		bcc	?lp0
+		sty	pr_chr_idx
+
+?x_shift	ldx	#0
+		beq	?no_shift
+
+?lp1		lsr	pr_lsr_buf+0		; do the shift
+		ror	pr_lsr_buf+1
+		ror	pr_lsr_buf+2
+		ror	pr_lsr_buf+3
+		ror	pr_lsr_buf+4
+		dex
+		bne	?lp1
+?no_shift		
+
+?x_ofs		ldy	#0			; copy shifted shape to screen buffer
+		
+		lda	(prn_ad1),y		; byte #0
+		ora	pr_lsr_buf
+		sta	(prn_ad1),y
+		iny
+		lda	(prn_ad1),y		; byte #1
+		ora	pr_lsr_buf+1
+		sta	(prn_ad1),y
+		iny
+		lda	(prn_ad1),y		; byte #2
+		ora	pr_lsr_buf+2
+		sta	(prn_ad1),y
+		iny
+		lda	(prn_ad1),y		; byte #3
+		ora	pr_lsr_buf+3
+		sta	(prn_ad1),y
+		iny
+		lda	(prn_ad1),y		; byte #4
+		ora	pr_lsr_buf+4
+		sta	(prn_ad1),y
+		iny
+
+		clc				; advance do next row!
+		lda	#PRNT_BPS
+		adc	prn_ad1
+		sta	prn_ad1
+		bcc	*+4
+		inc	prn_ad1+1
+
+		lda	pr_chr_idx		; get the shape index
+		cmp	#[4*40]			; all bytes of shape is copied?
+		bcc	?ch_cplp
+
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; prints centered line of text
+;
+; regs: X,Y address of text to print
+;
+; TEXT format: ANTIC codes!
+; control characters: $80 new line, $FF end of message
+;
+
+prnt_line	stx	?msg+1			; store message address
+		sty	?msg+2
+		stx	prn_ad2
+		sty	prn_ad2+1
+
+?nxt_ln		ldy	#0			; clear the pixel count
+		sty	pr_pxl_cnt
+		sty	pr_pxl_cnt+1
+
+?lpc		lda	(prn_ad2),y		; get char of message
+		bmi	?exc			; control character? (EoL, EoF?)
+		tax
+		clc
+		lda	xr_fnt_size,x		; get the font/shape size
+		adc	pr_pxl_cnt		; add to pixel count
+		sta	pr_pxl_cnt
+		bcc	*+4
+		inc	pr_pxl_cnt+1
+		iny
+		bpl	?lpc
+
+?exc		tya
+		sec				; skip control character!
+		adc	prn_ad2
+		sta	prn_ad2
+		bcc	*+4
+		inc	prn_ad2+1
+
+		sec				; calculate center (xpos = (320 - pixel_count) /2)
+		lda	#<320
+		sbc	pr_pxl_cnt
+		sta	pr_xpos
+		lda	#>320
+		sbc	pr_pxl_cnt+1
+		sta	pr_xpos+1
+
+		lsr	pr_xpos+1		; /2
+		ror	pr_xpos
+
+; message print loop
+
+?msg		lda	$f00d			; get character
+		bmi	?eol			; control character?
+		
+		inw	?msg+1			; incr. msg. pointer
+		pha				; store on stack
+		jsr	prnt_char		; print character
+		
+		pla				; restore char value
+		tax
+		clc		
+		lda	xr_fnt_size,x		; get char/shape size
+		adc	pr_xpos			; adv. X position
+		sta	pr_xpos
+		bcc	*+4
+		inc	pr_xpos+1
+
+		jmp	?msg			;  do the loop!
+
+?eol		inw	?msg+1			; skip control character!
+
+		cmp	#$ff			; end of message?
+		bne	?cont			; nope!
+		rts				; yes! exit the loop!
+
+?cont		clc				; adv. Y position
+		lda	#PRNT_Y_ADD
+		adc	pr_ypos
+		sta	pr_ypos
+		jmp	?nxt_ln
+
+; ------------------------------------------------------------------------------
+;
+; main test proc start here in STANDALONE MODE!
+;
+		ift	PRNT_STANDALONE
+
+prnt_main	jsr	prnt_make_lut		; make LUT's
+		jsr	prnt_make_dl		; make test Display List
+		
+		mwa	#prnt_dli $200
+		mwa	#prnt_dl $230		; setup test DL
+
+		dec	$d40e
+
+		mwa	#$0c $2c5		; set pixel luminance
+		mva	#$02 $2c6		; darker background
+
+prnt_loop	ldx	#0			; print test messages
+
+?msg_lp		lda	msgs_list,x
+		bmi	prnt_loop
+		inx
+		sta	pr_ypos
+
+		lda	msgs_list,x
+		inx
+		pha
+
+		ldy	msgs_list,x
+		inx
+
+		stx	?regX+1
+
+		pla
+		tax
+
+		jsr	prnt_line
+		jsr	do_cls
+
+?regX		ldx	#0
+		jmp	?msg_lp
+
+
+msgs_list	dta	56,a(msg1)
+		dta	56,a(msg2)
+		dta	0,a(msg3)
+		dta	112,a(msg4)
+		dta	-1
+
+do_cls		lda	#$04			; wait for key press!
+		bit	$d20f
+		bne	*-3
+
+		lda	$2c5			; get pixel luminance
+		pha				; store on stack!
+		
+		lda	$2c6			; pixel color = background color
+		sta	$2c5			; (hide pixels while doing CLS!)
+
+		lda	$14
+		cmp	$14
+		beq	*-2
+
+		jsr	prnt_cls		; clear screen!
+
+		pla
+		sta	$2c5			; restore pixel luminance
+
+		lda	#$04			; wait for key release!
+		bit	$d20f
+		beq	*-3
+
+		rts
+
+; test messages
+
+msg1		dta	d'TO ONE OF OUR',$80,d'DEAREST FRIENDS',$ff
+msg2		dta	d'ABSZTYFIKANCI',$80,d'GRUBEJ BERTY',$ff
+msg3		dta	d'# WIDE MIDDLE #',$80,d'+ ALSO, NARROW!?! -',$ff
+msg4		dta	d'- SLIGHT LABS -',$80,d'WARSAW, 2025.11.18',$ff
+
+		run	prnt_main
+		eif
+
+; ------------------------------------------------------------------------------
+;
+; procedure decompresses proportional font to free bank
+;
+
+prnt_depack_fnt	lda	banks+1
+		jsr	un_zx7_set_bnk
+	
+		ldx	#<[fnt_xry_adr]
+		ldy	#>[fnt_xry_adr]
+		jsr	un_zx7_set_dst
+
+		lda	$d301
+		pha
+		lda	XMS_FNT_BANK
+		sta	$d301
+		sta	un_zx7?ret_bnk+1
+
+		ldx	#<xprop_fnt
+		ldy	#>xprop_fnt
+		jsr	un_zx7
+
+		pla
+		sta	$d301
+		lda	#$fe
+		sta	un_zx7?ret_bnk+1
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; proc show dedication (external mode)
+;
+
+msg_dedic	dta	d'TO ONE OF OUR',$80,d'DEAREST FRIENDS',$ff
+
+dedication	lda	$d301
+		pha
+		lda	XMS_FNT_BANK
+		sta	$d301
+
+		jsr	prnt_depack_fnt
+		jsr	prnt_make_lut
+		jsr	prnt_make_dl
+		jsr	prnt_cls
+
+		lda	#0
+		sta	pr_ypos
+		ldx	#<msg_dedic
+		ldy	#>msg_dedic
+		jsr	prnt_line
+
+		pla
+		sta	$d301
+
+		lda	#$04
+		sta	pr_max_luma
+
+		jsr	wait_vsync
+
+		mwa	#prnt_dl $d402
+		mwa	#ded_dli0 dli_vec
+		mwa	#$22 $d400
+		dec	$d40e
+
+		lda	#$00
+		sta	$d018
+		sta	$d01a
+
+		ldx	#6			; fade in
+?fdi		ldy	#8
+		jsr	prn_w8_xvb
+	
+		inc	pr_max_luma
+		inc	pr_max_luma
+
+		dex
+		bne	?fdi
+
+		jsr	prep_slt_logo		; prepare slight logo data
+
+		ldx	#<$138
+		ldy	#>$138
+		jsr	wait4frame
+
+		ldx	#6			; fade out
+?fdo		ldy	#8
+		jsr	prn_w8_xvb
+	
+		dec	pr_max_luma
+		dec	pr_max_luma
+
+		dex
+		bne	?fdo
+
+		lsr	$d40e
+		lda	#$00
+		sta	$d017
+		sta	$d400
+
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; "CODE:"
+
+msg_code	dta	d'CODE',$ff
+
+cred_code	lda	$d301
+		pha
+		lda	XMS_FNT_BANK
+		sta	$d301
+
+		jsr	prnt_make_lut
+		jsr	prnt_make_dl
+		jsr	prnt_cls
+
+		lda	#0
+		sta	pr_ypos
+		ldx	#<msg_code
+		ldy	#>msg_code
+		jsr	prnt_line
+
+		pla
+		sta	$d301
+
+		ift	TCR_DISPLAY
+		lda	#$c4
+		sta	$d016
+		eif
+
+		ldx	#<$1da0
+		ldy	#>$1da0
+		jsr	wait4frame
+
+		lda	#$04
+		sta	pr_max_luma
+
+		jsr	wait_vsync
+
+		mwa	#prnt_dl $d402
+		mwa	#ded_dli0 dli_vec
+		mwa	#$22 $d400
+		dec	$d40e
+
+		lda	#$00
+		sta	$d018
+		sta	$d01a
+
+		ldx	#6			; fade in
+?fdi		ldy	#5
+		jsr	prn_w8_xvb
+	
+		inc	pr_max_luma
+		inc	pr_max_luma
+
+		dex
+		bne	?fdi
+
+		ldx	#<[$1e00]
+		ldy	#>[$1e00]
+		jsr	wait4frame
+
+		ldx	#6			; fade out
+?fdo		ldy	#10
+		jsr	prn_w8_xvb
+	
+		dec	pr_max_luma
+		dec	pr_max_luma
+
+		dex
+		bne	?fdo
+
+		lsr	$d40e
+		lda	#$00
+		sta	$d017
+		sta	$d400
+
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; "MSX & GFX:"
+
+msg_msx		dta	d'MSX & GFX',$ff
+
+cred_msx	lda	$d301
+		pha
+		lda	XMS_FNT_BANK
+		sta	$d301
+
+		jsr	prnt_make_lut
+		jsr	prnt_make_dl
+		jsr	prnt_cls
+
+		lda	#0
+		sta	pr_ypos
+		ldx	#<msg_msx
+		ldy	#>msg_msx
+		jsr	prnt_line
+
+		pla
+		sta	$d301
+
+		ift	TCR_DISPLAY
+		lda	#$c4
+		sta	$d016
+		eif
+
+		ldx	#<$1f20
+		ldy	#>$1f20
+		jsr	wait4frame
+
+		lda	#$04
+		sta	pr_max_luma
+
+		jsr	wait_vsync
+
+		mwa	#prnt_dl $d402
+		mwa	#ded_dli0 dli_vec
+		mwa	#$22 $d400
+		dec	$d40e
+
+		lda	#$00
+		sta	$d018
+		sta	$d01a
+
+		ldx	#6			; fade in
+?fdi		ldy	#8
+		jsr	prn_w8_xvb
+	
+		inc	pr_max_luma
+		inc	pr_max_luma
+
+		dex
+		bne	?fdi
+
+		ldx	#<$1f80
+		ldy	#>$1f80
+		jsr	wait4frame
+
+		ldx	#6			; fade out
+?fdo		ldy	#10
+		jsr	prn_w8_xvb
+	
+		dec	pr_max_luma
+		dec	pr_max_luma
+
+		dex
+		bne	?fdo
+
+		lsr	$d40e
+		lda	#$00
+		sta	$d017
+		sta	$d400
+
+		rts
+
+prn_w8_xvb	jsr	wait_vsync
+		dey
+		bne	prn_w8_xvb
+		rts
+
+ded_dli0	sta	?reg_A+1
+		stx	?reg_X+1
+
+		ldx	#$02
+?d0		stx	$d40a
+		stx	$d017
+		inx
+		inx
+		cpx	pr_max_luma
+		bcc	?d0		
+
+		mwa	#ded_dli1 dli_vec
+
+?reg_A		lda	#0
+?reg_X		ldx	#0
+		rti
+
+ded_dli1	sta	?reg_A+1
+		stx	?reg_X+1
+
+		ldx	#$0e
+
+?d0		sta	$d40a
+		txa
+		cmp	pr_max_luma
+		bcc	?s0
+		lda	pr_max_luma
+		sbc	#2
+
+?s0		sta	$d017
+		dex
+		dex
+		bne	?d0		
+
+		mwa	#ded_dli0 dli_vec
+
+?reg_A		lda	#0
+?reg_X		ldx	#0
+		rti
+
+; ------------------------------------------------------------------------------
+;
+; show selected logo
+;
+
+show_rzg_logo	jsr	prep_rzg_logo
+
+		lda	#$7d
+		ldy	#$6d
+		jsr	led_gem_on
+
+		ldx	#<$047b
+		ldy	#>$047b
+		jsr	wait4frame
+
+		lda	msx_frame_cnt
+		and	#$0f
+		sta	hb_rate
+
+		dec	$d40e
+
+		lda	#$90
+		sec				; fast fade in
+		jsr	logo_fade_in
+
+		ldx	#<$0530
+		ldy	#>$0530
+		jsr	wait4frame
+
+		ldx	#1
+		jsr	logo_fade_out
+		lsr	$d40e
+		
+		jmp	led_gem_off
+
+show_xry_logo	jsr	prep_xry_logo
+
+		ldx	#<$1fe0
+		ldy	#>$1fe0
+		jsr	wait4frame
+
+		lda	#$40
+		clc				; slower fade in
+		jsr	logo_fade_in
+
+		ldx	#<$2040
+		ldy	#>$2040
+		jsr	wait4frame
+
+		ldx	#5
+		jmp	logo_fade_out
+
+show_sbn_logo	jsr	prep_sbn_logo
+
+		ldx	#<$1e60
+		ldy	#>$1e60
+		jsr	wait4frame
+
+		lda	#$c0
+		clc
+		jsr	logo_fade_in
+
+		ldx	#<$1ec0
+		ldy	#>$1ec0
+		jsr	wait4frame
+
+		ldx	#5
+		jmp	logo_fade_out
+
+show_rev_logo	jsr	prep_rev_logo
+
+		ldx	#<$0300
+		ldy	#>$0300
+		jsr	wait4frame
+
+		lda	#$a0
+		clc
+		jsr	logo_fade_in
+
+		ldx	#<$0368
+		ldy	#>$0368
+		jsr	wait4frame
+
+		ldx	#4
+		jmp	logo_fade_out
+
+; SLIGHT logo
+
+show_slt_logo	ldx	#<$0180
+		ldy	#>$0180
+		jsr	wait4frame
+
+		lda	#$e0
+		clc
+		jsr	logo_fade_in
+
+		ldx	#<$01e8
+		ldy	#>$01e8
+		jsr	wait4frame
+
+		ldx	#3
+		jsr	logo_fade_out
+		rts
+
+logo_fade_in	php
+		sta	log_col_tab
+		sta	log_col_tab+1
+		sta	log_col_tab+2
+
+		jsr	wait_vsync
+		mwa	#show_lgo_vbl vbl_vec
+
+		ldy	#$0f
+		plp
+
+		lda	#$20		; jsr $xxxx
+		bcc	*+4
+		lda	#$2c		; bit $xxxx
+		sta	?lgo_fdin
+
+
+?lgo_fdin 	jsr	wait_vsync
+		jsr	wait_vsync
+		
+		ldx	#2
+?lpfi		clc
+		lda	log_col_rem,x
+		adc	log_col_sub,x
+		sta	log_col_rem,x
+		bcc	*+5
+		inc	log_col_tab,x
+		dex
+		bpl	?lpfi
+		dey
+		bpl	?lgo_fdin
+		rts
+
+logo_fade_out	stx	?lgo_fdou+1
+
+		ldy	#$0f
+
+?lgo_fdou 	ldx	#0
+?dly		jsr	wait_vsync
+		dex	
+		bne	?dly
+		
+		ldx	#2
+?lpfo		sec
+		lda	log_col_rem,x
+		sbc	log_col_sub,x
+		sta	log_col_rem,x
+		bcs	*+5
+		dec	log_col_tab,x
+
+		dex
+		bpl	?lpfo
+
+		dey
+		bpl	?lgo_fdou
+
+		lda	#0
+		sta	log_col_tab
+		sta	log_col_tab+1
+		sta	log_col_tab+2
+		sta	$d016
+		sta	$d017
+		sta	$d018
+
+		mwa	#rts_rts vbl_vec
+		lda	#$00
+		sta	$d400
+		rts
+
+show_lgo_vbl	lda	vbl_cnt
+		lsr	@
+		ldx	<logo_dl0
+		ldy	>logo_dl0
+		bcc	?ofld
+		ldx	<logo_dl1
+		ldy	>logo_dl1
+?ofld		stx	$d402
+		sty	$d403
+
+		jsr	gem_led_vbl
+
+logo_scr_dma	lda	#$22
+		sta	$d400
+
+		mwa	log_col_tab+0 $d016
+		mwa	log_col_tab+1 $d017
+		mwa	log_col_tab+2 $d018
+
+		jsr	set_gem_lum
+
+		mwa	#logo_dli0 dli_vec
+		rts
+
+logo_dli0	sta	?reg_A+1
+
+		lda	log_col_tab+0
+		eor	#$60
+		sta	$d40a
+		sta	$d016
+		lda	log_col_tab+1
+		eor	#$60
+		sta	$d017
+		lda	log_col_tab+2
+		eor	#$60
+		sta	$d018
+
+		mwa	#logo_dli1 dli_vec
+
+?reg_A		lda	#0
+		rti
+
+logo_dli1	sta	?reg_A+1
+
+		lda	log_col_tab+0
+		sta	$d40a
+		sta	$d016
+		lda	log_col_tab+1
+		sta	$d017
+		lda	log_col_tab+2
+		sta	$d018
+
+?reg_A		lda	#0
+		rti
+
+log_col_tab	dta	$04,$08,$0f
+log_col_rem	dta	$00,$00,$00
+log_col_sub	dta	$40,$80,$c0
+
+; ZX7 compressed!
+
+prep_slt_logo	jsr	prep_cls_mem
+		jsr	logo_mk_gr15d
+
+		lda	banks+2
+		jsr	un_zx7_set_bnk
+
+		ldx	#<[gr15_scr_a+$550]
+		ldy	#>[gr15_scr_a+$550]
+		jsr	un_zx7_set_dst
+
+		ldx	#<slt_logo_bp0
+		ldy	#>slt_logo_bp0
+		jsr	un_zx7
+
+		ldx	#<[gr15_scr_b+$550]
+		ldy	#>[gr15_scr_b+$550]
+		jsr	un_zx7_set_dst
+
+		ldx	#<slt_logo_bp1
+		ldy	#>slt_logo_bp1
+		jsr	un_zx7
+
+		lda	#$22			; normal screen dma! (40 bytes/line)
+		jmp	set_scr_dma
+
+prep_rev_logo	jsr	prep_cls_mem
+		jsr	logo_mk_gr15d
+
+		lda	banks+2
+		jsr	un_zx7_set_bnk
+
+		ldx	#<[gr15_scr_a+$7d0]
+		ldy	#>[gr15_scr_a+$7d0]
+		jsr	un_zx7_set_dst
+
+		ldx	#<rev_logo_bp0
+		ldy	#>rev_logo_bp0
+		jsr	un_zx7
+
+		ldx	#<[gr15_scr_b+$7d0]
+		ldy	#>[gr15_scr_b+$7d0]
+		jsr	un_zx7_set_dst
+
+		ldx	#<rev_logo_bp1
+		ldy	#>rev_logo_bp1
+		jsr	un_zx7
+
+		lda	#$22			; normal screen dma! (40 bytes/line)
+		jmp	set_scr_dma
+
+prep_rzg_logo	jsr	prep_cls_mem
+
+		lda	#$2c			; enable DLI lines (change jmp $xxxx to bit $xxxx)
+		sta	logo_mk_gr15s?dli_ena
+		jsr	logo_mk_gr15d
+		lda	#$4c			; restore default state (jmp $xxxx)
+		sta	logo_mk_gr15s?dli_ena
+
+		lda	banks+2
+		jsr	un_zx7_set_bnk
+
+		ldx	#<[gr15_scr_a+$348]
+		ldy	#>[gr15_scr_a+$348]
+		jsr	un_zx7_set_dst
+
+		ldx	#<rzg_logo_bp0
+		ldy	#>rzg_logo_bp0
+		jsr	un_zx7
+
+		ldx	#<[gr15_scr_b+$348]
+		ldy	#>[gr15_scr_b+$348]
+		jsr	un_zx7_set_dst
+
+		ldx	#<rzg_logo_bp1
+		ldy	#>rzg_logo_bp1
+		jsr	un_zx7
+
+		lda	#$3e			; normal screen dma! (40 bytes/line)
+		jmp	set_scr_dma
+
+prep_sbn_logo	jsr	prep_cls_mem
+		jsr	logo_mk_gr15d
+
+		lda	banks+2
+		jsr	un_zx7_set_bnk
+
+		ldx	#<[gr15_scr_a+$758]
+		ldy	#>[gr15_scr_a+$758]
+		jsr	un_zx7_set_dst
+
+		ldx	#<sbn_logo_bp0
+		ldy	#>sbn_logo_bp0
+		jsr	un_zx7
+
+		ldx	#<[gr15_scr_b+$758]
+		ldy	#>[gr15_scr_b+$758]
+		jsr	un_zx7_set_dst
+
+		ldx	#<sbn_logo_bp1
+		ldy	#>sbn_logo_bp1
+		jsr	un_zx7
+
+		lda	#$22			; normal screen dma! (40 bytes/line)
+		sta	logo_scr_dma+1
+		rts
+
+prep_xry_logo	jsr	prep_cls_mem
+		jsr	logo_mk_gr15d
+
+		lda	banks+2
+		jsr	un_zx7_set_bnk
+
+		ldx	#<[gr15_scr_a+$5a0]
+		ldy	#>[gr15_scr_a+$5a0]
+		jsr	un_zx7_set_dst
+
+		ldx	#<xry_logo_bp0
+		ldy	#>xry_logo_bp0
+		jsr	un_zx7
+
+		ldx	#<[gr15_scr_b+$5a0]
+		ldy	#>[gr15_scr_b+$5a0]
+		jsr	un_zx7_set_dst
+
+		ldx	#<xry_logo_bp1
+		ldy	#>xry_logo_bp1
+		jsr	un_zx7
+
+		lda	#$22			; normal screen dma! (40 bytes/line)
+set_scr_dma	sta	logo_scr_dma+1
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; clears the screen memory areas
+;
+
+prep_cls_mem	lda	$d301
+		pha
+		lda	#$fe
+		sta	$d301
+		
+		mwa	#gr15_scr_a ?clr0+1
+		mwa	#gr15_scr_b ?clr1+1
+
+		ldx	#$1e
+		ldy	#$00
+		tya
+?clr0		sta	$ffff,y
+?clr1		sta	$ffff,y
+		dey
+		bne	?clr0
+		inc	?clr0+2
+		inc	?clr1+2
+		dex
+		bne	?clr0
+
+		pla
+		sta	$d301
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; make gr15 display lists for interlaced pictures
+;
+
+logo_mk_gr15d	mwa	#gr15_scr_a prn_ad0
+		ldx	#<logo_dl0
+		ldy	#>logo_dl0
+		jsr	logo_mk_gr15s
+
+		mwa	#gr15_scr_b prn_ad0
+		ldx	#<logo_dl1
+		ldy	#>logo_dl1
+;		jmp	logo_mk_gr15s		; not needed when logo_mk_gr15s is below
+
+logo_mk_gr15s	stx	?put_dl+1
+		sty	?put_dl+2
+		stx	?edl_lo+1
+		sty	?edl_hi+1
+
+
+		ift	TCR_DISPLAY
+		lda	#$46
+		jsr	?put_dl
+		lda	#<tcr_info
+		jsr	?put_dl
+		lda	#>tcr_info
+		jsr	?put_dl
+		lda	#$70
+		els
+		lda	#$70
+		jsr	?put_dl
+		eif
+		jsr	?put_dl
+		jsr	?put_dl
+
+		ldx	#192
+?mdl		lda	#$4e		; mode $0E + HSCROLL
+
+?dli_ena	jmp	?no_rzg
+		
+		cpx	#[192-89]
+		beq	?dli
+		cpx	#[192-114]
+		bne	?no_rzg
+
+?dli		ora	#$80
+
+?no_rzg		jsr	?put_dl
+		lda	prn_ad0
+		jsr	?put_dl
+		lda	prn_ad0+1
+		jsr	?put_dl
+
+		clc
+		lda	#40
+		adc	prn_ad0
+		sta	prn_ad0
+		bcc	*+4
+		inc	prn_ad0+1
+
+		dex
+		bne	?mdl
+
+		lda	#$41
+		jsr	?put_dl
+?edl_lo		lda	#$00
+		jsr	?put_dl
+?edl_hi		lda	#$00
+;		jmp	?put_dl		; not needed when ?put_dl is below...
+
+?put_dl		sta	$cafe
+		inw	?put_dl+1
+		rts
+
+xr_fnt_size	dta	  08,06,09,17,00,00,19,03,00,00,00,14,04,08,04,09,16,09,15,15,16,15,16,13,16,16,04,04,00,00,00,13
+		dta       00,15,15,16,15,11,11,16,15,05,15,17,11,20,16,16,15,16,15,16,14,15,16,26,18,16,13,00,00,00,00,00

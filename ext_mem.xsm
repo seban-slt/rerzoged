@@ -1,0 +1,192 @@
+; ------------------------------------------------------------------------------
+;
+; ext RAM detection & bank count
+;
+; defines 
+
+banks		equ	$180
+
+		org	$bfd3
+		dta	d'v1.1'
+
+; detect & check XMS (we need 4 extra banks)
+
+		org	$500
+
+detect_ext	ldx	#$04		; 4 banks + main RAM
+
+?lp0		lda	bank_defs,x
+		sta	$d301
+		pha
+		lda	$4000
+		sta	mem_sav,x
+		pla
+		sta	$4000
+		dex
+		bpl	?lp0
+
+		ldx	#$00
+?lp1		lda	bank_defs,x
+		sta	$d301
+		cmp	$4000
+		bne	?no_bnk
+		sta	banks,x
+		inc	bank_count
+?no_bnk		inx
+		cpx	#$05		; 4 banks + main RAM
+		bcc	?lp1
+
+		lda	bank_count
+		cmp	#$05
+		bcs	xms_ok
+
+show_err_msg	ldx	<xms_dl
+		ldy	>xms_dl
+		stx	$230
+		sty	$231
+		lda	#$30
+		sta	$2c6
+		sta	$2c8
+		lda	#$0f
+		sta	$2c5
+		lda	#$22
+		sta	$22f
+
+		lda	#$08
+		bit	$d20f
+		bne	*-3
+		inc	$244
+		jmp	$e477
+
+; procki pomocnicze
+
+set_next_bank	ldx	#0
+		lda	banks,x
+		sta	$d301
+		inc	set_next_bank+1
+		rts
+
+prep_bank_table	ldx	#$04
+
+prep_bank_lp	lda	banks,x
+		and	#$fe
+		sta	banks,x
+		dex
+		bpl	prep_bank_lp
+
+		stx	$d301
+		rts
+
+xms_ok		lda	#$00
+		sta	$14
+
+?tvc_lp		lda	$d40b			; check tha ANTIC is PAL or NTSC
+?vcnt_max	cmp	#0
+		bcc	*+5
+		sta	?vcnt_max+1
+
+		lda	$14
+		cmp	#$02
+		bcc	?tvc_lp
+
+		lda	?vcnt_max+1		; max. lines reported by VCOUNT
+		cmp	#132			; if > 132 then PAL ANTIC is found!
+		bcs	?pal_OK
+
+		ldx	#79			; when NTSC ANTIC is detected ...
+?msg_cp		lda	ext_info_tv,x		; copy appropriate message
+		
+		cpx	#40			; when X>39 
+		bcc	*+4
+		lda	#$00			; erase 2nd line of message
+		
+		sta	ext_info,x
+		dex
+		bpl	?msg_cp
+
+		jmp	show_err_msg
+
+?pal_OK		rts
+
+bank_defs	dta	$c3,$c7,$cb,$cf,$ff
+bank_count	dta	$00
+
+xms_dl		dta	$70,$70,$70,$42,a(ext_info),$10,$02,$41,a(xms_dl)
+
+;			  0123456789012345678901234567890123456789
+ext_info	dta	d"     This program requires at least     "
+		dta	d"     4 extra memory banks installed     "
+ext_info_tv	dta	d" This program requires PAL ANTIC (50Hz) "
+
+mem_sav		org	*+5
+
+		ini	detect_ext
+
+; initial stereo check
+
+		org	$0640
+
+stereo_check	jsr	detect_stereo
+		sta	banks-1		
+		beq	*+3
+		rts
+
+		ldx	<info_dlist
+		ldy	>info_dlist
+		stx	$230
+		sty	$231
+
+		lda	#$22
+		sta	$22f
+
+		ldx	#$ff
+		stx	$2c5
+		inx
+		stx	$2c6
+		stx	$2c8
+
+?loop		lda	$14
+:3		lsr	@
+		and	#$02
+		sta	755
+
+		lda	$14
+		bpl	?loop
+		rts
+
+info_dlist	dta	$70,$70,$70,$42,a(info_line),$41,a(info_dlist)
+
+;			  0123456789012345678901234567890123456789
+info_line	dta	d'2nd POKEY missing! Strongly recommended!'*
+
+; STEREO detect routine
+;
+; IN : none
+; OUT: A,X = 0 - mono, A,X = 1 - stereo, 
+
+
+detect_stereo	ldx	#$00
+		stx	$d20f	; halt POKEY #0
+		stx	$d21f	; halt POKEY #1
+		ldy	#$03
+		sty	$d21f	; release POKEY #1
+
+		sta	$d40a	; delay necessary for
+		sta	$d40a	; accelerator boards
+
+		lda	#$ff
+?loop		and	$d20a	; see if POKEY #0 is halted ($d20a = $ff)
+		inx
+		bne	?loop
+
+		sty	$d20f	; release POKEY #0
+
+		cmp	#$ff
+		bne	?mono
+
+		inx
+
+?mono		txa
+		rts
+
+		ini	stereo_check

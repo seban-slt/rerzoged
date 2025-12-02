@@ -1,0 +1,639 @@
+BYTE_ADDER	equ	0
+NIBBLE_ADDER	equ	1
+FULL_ADDER	equ	2
+
+SBAR_LINES	equ	[192]
+
+; tables
+
+sbars_dl	equ	dl0		; org	*+$300
+sbr_hscr	equ	free_pg0	; org	*+$100
+
+add_lut_ln	equ	free_pg1	; org	*+$100
+add_lut_un	equ	free_pg2	; org	*+$100
+add_lut_bb	equ	free_pg3	; org	*+$100
+hsc_lut_cnv	equ	free_pg4	; org	*+$100
+
+; zero page
+
+sbr_line	equ	$00
+
+sbr_cnt		equ	$f1
+h_dx1		equ	$f2
+h_dx2		equ	$f3
+
+; ------------------------------------------------------------------------------
+;
+; sine tables
+
+		org	[[*/256]+1]*256		; page align
+
+sbars_sine	dta	sin(43,36,256)
+hscrl_sine	dta	sin(63,63,256)
+
+sbr_dli_ex	dta	$41,a(sbars_dl)
+
+		icl	'params_sbars.xsm'
+
+sbr_val		dta	0,0,0,0,0,0,0,0
+sbr_idx		dta	$00
+bar_mode	dta	$00
+sback_color	dta	$00
+
+; ------------------------------------------------------------------------------
+;
+; sbars zero page loop
+;
+
+; zp code - thin bar
+;
+
+bar_code_load	equ	*
+		org	r:$30
+bar_code_zp	equ	*
+
+sbr_loop	
+
+hsc_idx		lda	sbr_hscr
+		sta	$d40a
+		inc	hsc_idx+1
+		sta	$d404
+
+		clc
+sbr_adc_x1	lda	#3
+		adc	z:sbr_dx1+1
+		sta	z:sbr_dx1+1
+
+		clc
+sbr_adc_x2	lda	#-2
+		adc	z:sbr_dx2+1
+		sta	z:sbr_dx2+1
+
+		clc
+sbr_dx1		lda	sbars_sine
+sbr_dx2		adc	sbars_sine
+		lsr	@
+		lsr	@
+		tax
+		bcc	up_nbl
+
+sbr_pxl_mod	ldy	sbr_line,x
+		lda	add_lut_ln,y
+		sta	sbr_line,x
+		
+		ldy	sbr_line+1,x
+		lda	add_lut_un,y
+		sta	sbr_line+1,x
+
+		dec	sbr_cnt
+		bne	sbr_loop
+		rts
+
+up_nbl		ldy	sbr_line,x
+		lda	add_lut_un,y
+		sta	sbr_line,x
+
+		ldy	sbr_line,x
+		lda	add_lut_ln,y
+		sta	sbr_line,x
+		
+		dec	sbr_cnt
+		bne	sbr_loop
+		rts
+
+bar_code_len	equ	*-sbr_loop
+
+; ------------------------------------------------------------------------------
+;
+; zp code - thick bar
+;
+		org	*-sbr_loop+bar_code_load
+fat_code_load	equ	*
+
+		org	r:sbr_pxl_mod
+
+sbr_pxl_fat	ldy	sbr_line,x
+		lda	add_lut_ln,y
+		sta	sbr_line,x
+		
+		ldy	sbr_line+1,x
+		lda	add_lut_bb,y
+		sta	sbr_line+1,x
+
+		dec	sbr_cnt
+		bne	sbr_loop
+		rts
+
+?up_nbl		ldy	sbr_line,x
+		lda	add_lut_bb,y
+		sta	sbr_line,x
+
+		ldy	sbr_line+1,x
+		lda	add_lut_un,y
+		sta	sbr_line+1,x
+		
+		dec	sbr_cnt
+		bne	sbr_loop
+		rts
+
+swp_code_len	equ	*-sbr_pxl_mod
+		org	*-sbr_pxl_fat+fat_code_load
+
+sbr_zp_copy	ldx	#[bar_code_len-1]
+
+?lp0		lda	bar_code_load,x
+		sta	bar_code_zp,x
+		dex
+		bpl	?lp0
+		rts
+
+sbr_zp_swap	ldx	#[swp_code_len-1]
+
+?lp0		lda	bar_code_load+bar_code_len,x
+		sta	sbr_pxl_mod,x
+		dex
+		bpl	?lp0
+		rts
+		
+; ------------------------------------------------------------------------------
+;
+; create DL
+
+sbr_make_dl	lda	#$70
+		jsr	sbr_put_dl
+		jsr	sbr_put_dl
+		jsr	sbr_put_dl
+
+		lda	#$80
+		jsr	sbr_put_dl
+		
+		ldx	#192
+
+?lp0		txa
+		pha
+
+		lda	#$5f
+		ldx	#<sbr_line
+		ldy	#>sbr_line
+		jsr	sbr_put_seq
+
+		pla
+		tax
+		dex
+		bne	?lp0
+
+
+		ift	TCR_DISPLAY
+
+		lda	#$70
+		jsr	sbr_put_dl
+
+		lda	#$c2
+		sta	$d016
+
+		lda	#$46
+		jsr	sbr_put_dl
+		lda	#<tcr_info
+		jsr	sbr_put_dl
+		lda	#>tcr_info
+		jsr	sbr_put_dl
+		eif
+
+		lda	#$41
+		ldx	#<sbars_dl
+		ldy	#>sbars_dl
+;		jmp	sbr_put_eq		; not needed when sbr_put_seq is below!
+
+sbr_put_seq	jsr	sbr_put_dl
+		txa
+		jsr	sbr_put_dl
+		tya
+;		jmp	sbr_put_dl		; not needed when sbr_put_dl is below!
+
+sbr_put_dl	sta	sbars_dl
+		inw	sbr_put_dl+1
+		rts
+
+
+; proc loads example parameters
+
+sbar_load_e	txa
+		pha
+		tya
+		pha
+
+		ldx	sbr_idx
+
+		lda	#$00
+		sta	sbr_sx1+1
+		sta	sbr_sx2+1
+		sta	sbr_dx1+1
+		sta	sbr_dx2+1
+		sta	hsc_idx+1
+
+		lda	sbr_adcx1,x
+		sta	sbr_val
+		lda	sbr_adcx2,x
+		sta	sbr_val+1
+
+		lda	sbr_spdx1,x
+		sta	sbr_val+2
+		lda	sbr_spdx2,x
+		sta	sbr_val+3
+
+		lda	sbr_adch1,x
+		sta	sbr_val+4
+		lda	sbr_adch2,x
+		sta	sbr_val+5
+
+		lda	sbr_spdh1,x
+		sta	sbr_val+6
+		lda	sbr_spdh2,x
+		sta	sbr_val+7
+
+		lda	sbr_mode,x
+		pha
+		and	#$f0
+		sta	sback_color
+		pla
+		and	#$01
+		jsr	set_bar_mode
+
+		inc	sbr_idx
+		lda	sbr_idx
+		eor	#[sbr_adcx2-sbr_adcx1]
+		bne	*+5
+		sta	sbr_idx
+
+		pla
+		tay
+		pla
+		tax
+		rts
+
+; set bar mode (thin/fat)
+
+set_bar_mode	sta	bar_mode
+		lsr	@
+		bcc	mode_thin
+		jmp	sbr_zp_swap
+
+mode_thin	jmp	sbr_zp_copy
+
+; parameters copy proc
+
+sbar_par_copy	lda	sbr_val
+		sta	sbr_adc_x1+1
+		lda	sbr_val+1
+		sta	sbr_adc_x2+1
+
+		lda	sbr_val+2
+		sta	sbr_spd_x1+1
+		lda	sbr_val+3
+		sta	sbr_spd_x2+1
+
+		lda	sbr_val+4
+		sta	hscr_upd?adc_h1+1
+		lda	sbr_val+5
+		sta	hscr_upd?adc_h2+1
+
+		lda	sbr_val+6
+		sta	hscr_upd?spd_h1+1
+		lda	sbr_val+7
+		sta	hscr_upd?spd_h2+1
+
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; creates adding LUTs
+
+sbr_make_luts	ldx	#0
+
+?lp0		txa			; upper nibble +1
+		and	#$f0
+		sta	?sbr_ora_u+1
+
+		txa
+		and	#$0f
+		clc
+		adc	#$01
+		cmp	#$10
+		bcc	*+4
+		lda	#$0f
+
+?sbr_ora_u	ora	#$00
+		sta	add_lut_ln,x
+
+
+		txa			; lower nibble +1
+		and	#$0f
+		sta	?sbr_ora_l+1
+
+		txa
+		and	#$f0
+		clc
+		adc	#$10
+		bcc	*+4
+		lda	#$f0
+
+?sbr_ora_l	ora	#$00
+		sta	add_lut_un,x
+
+; create h-scroll conversion loop
+
+		txa
+		lsr	@
+		lsr	@
+		lsr	@
+		lsr	@
+		eor	#$0f
+		and	#$0e
+		sta	hsc_lut_cnv,x
+
+		inx
+		bne	?lp0
+
+?lp1		txa			; byte adder
+		ldy	add_lut_un,x
+		lda	add_lut_ln,y
+		sta	add_lut_bb,x		
+
+		inx
+		bne	?lp1
+
+		rts
+
+sbr_line_clr	ldx	#$2f
+		lda	#$00
+?lp0		sta	sbr_line,x
+		dex
+		bpl	?lp0
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; init the bars (every frame)
+;
+
+sbr_init	lda	#$00
+		sta	hsc_idx+1
+
+sbr_sx1		lda	#0
+		sta	sbr_dx1+1
+sbr_sx2		lda	#0
+		sta	sbr_dx2+1
+
+		clc
+sbr_spd_x1	lda	#1
+		adc	sbr_sx1+1
+		sta	sbr_sx1+1
+
+		clc
+sbr_spd_x2	lda	#-3
+		adc	sbr_sx2+1
+		sta	sbr_sx2+1
+
+		lda	#0
+:44		dta	$85,b(sbr_line+#)
+
+		rts		
+
+
+; ------------------------------------------------------------------------------
+;
+; update hscrl
+;
+
+hscr_upd	ldy	#[SBAR_LINES/2]
+
+?h_sx1		lda	#0
+		sta	h_dx1
+?h_sx2		lda	#0
+		sta	h_dx2
+
+?hscr_lp0	clc
+		ldx	h_dx1
+		lda	hscrl_sine,x
+		ldx	h_dx2
+		adc	hscrl_sine,x
+		tax
+		lda	hsc_lut_cnv,x
+		sta	sbr_hscr-1,y
+
+		clc
+?adc_h1		lda	#1
+		adc	h_dx1
+		sta	h_dx1
+
+		clc
+?adc_h2		lda	#2
+		adc	h_dx2
+		sta	h_dx2
+
+		dey
+		bne	?hscr_lp0	
+
+?spd_h1		lda	#16
+		adc	?h_sx1+1
+		sta	?h_sx1+1
+
+?spd_h2		lda	#-8
+		adc	?h_sx2+1
+		sta	?h_sx2+1
+
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; slight bars deluxe main 
+;
+
+s_bars		jsr	wait_vsync
+		lda	#$00
+		sta	$d400
+		sta	$d01a
+
+		jsr	sbr_make_dl
+		jsr	sbr_make_luts
+		jsr	sbr_line_clr
+		jsr	sbr_zp_copy
+
+		lda	#0
+		sta	sbr_cnt
+
+		jsr	sbar_load_e
+		jsr	sbar_par_copy
+
+		jsr	wait_vsync
+
+		mwa	#sbars_dl $d402
+		lda	#$40
+		sta	$d01b
+
+		mwa	#sbar_vbl vbl_vec
+		mwa	#dli_vec0 dli_vec
+		dec	$d40e			; enable DLI + VBI
+
+		ldx	#<$11a0
+		ldy	#>$11a0
+		jsr	wait4frame
+
+		lda	#$c0-16			; adjusted -16 frames to compensate "curtain effect"
+		sta	sbar_tmr
+
+sbr_m_loop	jsr	wait_vsync
+
+		lda	sbr_show_cnt
+		cmp	#7
+		bne	?sbr_cin
+
+		lda	sbar_height+1
+		cmp	#[SBAR_LINES/2]
+		bcs	*+5
+		inc	sbar_height+1
+?sbr_cin
+
+		lda	sbar_tmr
+		bne	?skp_set
+		lda	#$c0
+		sta	sbar_tmr
+
+		jsr	sbar_load_e
+		jsr	sbar_par_copy
+
+		dec	sbr_show_cnt
+
+?skp_set	lda	sbar_tmr		; curtain up!
+		cmp	#$10
+		bcs	?crt_nxt0
+		eor	#$0f
+		tax
+		lda	expo_eout_lut,x
+		sta	sbar_height+1
+		bcc	?sbr_cont		; C=0 always here!
+
+?crt_nxt0	lda	sbr_show_cnt		; skip curtain for 1st preset!
+		cmp	#$07
+		bcs	?crt_nxt1
+
+		lda	sbar_tmr		; curtain down!
+		cmp	#$b1
+		bcc	?crt_nxt1
+		sbc	#1
+		and	#$0f
+		tax
+		lda	expo_eout_lut,x
+		sta	sbar_height+1
+?crt_nxt1
+
+?sbr_cont	lda	sbar_tmr
+		cmp	#$b0
+		bcs	sbr_m_loop
+		lda	sbr_show_cnt
+		bne	sbr_m_loop
+
+		ldx	#<$1730
+		ldy	#>$1730
+		jsr	wait4frame
+
+?sbr_fade	jsr	wait_vsync
+		dec	sbar_height+1
+		dec	sbar_height+1
+		bpl	?sbr_fade
+
+		lda	#$00
+		sta	sback_color
+		sta	$d01a
+		sta	$d01a
+		lsr	$d40e
+
+		mwa	#rts_rts vbl_vec
+		mwa	#rti_rti dli_vec
+		rts
+
+expo_eout_lut	dta	96,95,93,90,84,74,58,43,30,20,12,7,3,1,0,0
+		
+; ------------------------------------------------------------------------------
+;
+; VBL proc
+;
+
+sbar_vbl	lda	#$00
+		sta	$d01a
+
+		lda	sback_color
+		and	#$f0
+		sta	dli_vec0?sbr_bcg+1
+
+?skp		lda	#$40
+		sta	$d01b
+
+		mwa	#sbars_dl $d402
+
+		lda	#$22
+		sta	$d400
+
+		mwa	#dli_vec0 dli_vec
+
+		dec	sbar_tmr
+
+sbar_height	lda	#0
+		sta	sbr_cnt
+
+		jsr	sbr_init
+	
+		jmp	hscr_upd
+
+sbar_tmr	dta	$c0
+
+; ------------------------------------------------------------------------------
+;
+; DLI procedures
+;
+
+dli_vec0	sta	?dli_A+1
+		stx	?dli_X+1
+		sty	?dli_Y+1
+
+		lda	sbr_cnt
+		beq	?sbr_sna
+
+?sbr_bcg	lda	#$00
+		sta	$d40a
+		jsr	set_bg_colr		; JSR/RTS used for delay!
+		jsr	sbr_loop
+	
+?sbr_sna	lda	#$00
+		sta	$d40a
+		jsr	set_bg_colr		; JSR/RTS used for delay!
+
+		ift	TCR_DISPLAY
+		lda	sbar_height+1
+		cmp	#[SBAR_LINES/2]
+		beq	?skp_doff
+		eif
+
+		ldx	#<sbr_dli_ex
+		ldy	#>sbr_dli_ex
+		sta	$d40a
+		stx	$d402
+		sty	$d403
+
+?skp_doff	ift	TCR_DISPLAY		; if TCR is enabled disable GTIA mode and set chars color.
+		lda	#$00
+		sta	$d40a
+		sta	$d01b
+		lda	#$c2
+		sta	$d016
+		eif
+
+?dli_A		lda	#0
+?dli_X		ldx	#0
+?dli_Y		ldy	#0
+		rti
+
+set_bg_colr	sta	$d01a
+		rts
+
+; ------------------------------------------------------------------------------

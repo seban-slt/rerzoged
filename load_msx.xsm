@@ -1,0 +1,12 @@
+		ini	set_next_bank		; bank #0
+	
+		org     $4000
+song_data_l	ins     'msx/half_l.lzss'
+song_data_r	ins	'msx/half_r.lzss'
+
+xms_plzm_sine	dta	sin(64,63,256)		; sine LUT for reRZóGed plazma
+xms_plt_sine_x	dta	sin(64,53,256)		; sine LUT for bob 3d plotter (X-Axis)
+xms_plt_sine_y	dta	sin(44,43,256)		; sine LUT for bob 3d plotter (Y-Axis)
+xms_plt_sine_z	dta	sin(16,15,256)		; sine LUT for bob 3d plotter (Z-Axis)
+
+		ert	*>$7fff

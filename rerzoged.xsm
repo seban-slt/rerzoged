@@ -1,0 +1,567 @@
+; configuration
+
+DISABLE			equ	0
+ENABLE			equ	1
+
+LOADING_SCREEN		equ	ENABLE
+TCR_DISPLAY		equ	0
+
+; memory layout
+
+stereo_status		equ	banks-1
+
+song_data		equ	$4000
+song_frames		equ	[$22ff-1]
+main_code_origin	equ	$8200
+lzss_decoder_origin	equ	main_code_origin-$200
+
+font_addr		equ	$d800		; [$d800-$dbff]
+lzss_buffers		equ	$dc00		; [$dc00-$edff]
+free_pg0		equ	$ee00
+free_pg1		equ	$ef00
+
+dl0			equ	$f000		; [$f000 - $f27f]
+free_pg2		equ	$f300
+dl1			equ	$f400		; [$f400 - $f67f]
+free_pg3		equ	$f700
+free_pg4		equ	$f800
+free_pg5		equ	$f900
+free_pg6		equ	$fa00
+free_pg7		equ	$fb00
+free_pg8		equ	$fc00
+free_pg9		equ	$fd00
+free_pga		equ	$fe00
+
+; [$ff00-$fff9] free at this moment.
+
+; defines
+
+scr0			equ	$4150		; hi-res screen #0
+scr1			equ	$6150		; hi-res screen #1
+
+; zero page variables
+
+		org	$f4
+ad0		org	*+2
+ad1		org	*+2
+vbl_cnt		org	*+1
+loop_cnt	org	*+1
+
+reg_A		org	*+1
+reg_X		org	*+1
+reg_Y		org	*+1
+
+var0		org	*+1
+var1		org	*+1
+
+prtn_zp_loc	equ	$10
+bobp_zp_loc	equ	$40
+plzm_zp_loc	equ	$30
+
+		ert	*>$ff
+
+		icl	'ext_mem.xsm'
+
+		ift	LOADING_SCREEN
+		icl	'loading_gr7.xsm'
+		eif
+
+		ift	TCR_DISPLAY
+
+		org	$4000
+		icl	'fnt/speed_script_font.xsm'
+
+copy_fnt	sei
+		inc	$d40e
+		dec	$d301
+
+		ldx	#$03
+		ldy	#$00
+cpf0		lda	spdsc_font,y
+cpf1		sta	font_addr,y
+		dey
+		bne	cpf0
+		inc	cpf0+2
+		inc	cpf1+2
+		dex
+		bpl	cpf0
+
+		inc	$d301
+		dec	$d40e
+		cli
+
+		rts
+
+		ini	copy_fnt
+
+		eif
+
+		icl	"load_msx.xsm"
+		icl	"load_gfx.xsm"
+		icl	"lzss16_decoder.xsm"
+
+		org	main_code_origin
+
+dli_vec		dta	a(rti_rti)
+vbl_vec		dta	a(rts_rts)
+
+		ift	TCR_DISPLAY
+
+;			  01234567890123456789
+tcr_info	dta	d'TCR:0000 L:0000     '
+
+show_tcr	ldx	#4			; print current msx frame
+		lda	msx_frame_cnt+1
+		jsr	put_hex
+		lda	msx_frame_cnt
+		jsr	put_hex
+
+		sec				; calculate frames left
+		lda	#<song_frames
+		sbc	msx_frame_cnt
+		pha
+		lda	#>song_frames
+		sbc	msx_frame_cnt+1
+
+		ldx	#11			; print frames left
+		jsr	put_hex
+		pla
+		jmp	put_hex
+
+put_hex		pha
+		lsr	@
+		lsr	@
+		lsr	@
+		lsr	@
+		jsr	p_hex
+		pla
+p_hex		and	#$0f
+		cmp	#$0a
+		sed
+		adc	#$10
+		cld
+		sta	tcr_info,x
+		inx
+		rts
+
+		eif
+
+; ------------------------------------------------------------------------------
+;
+; NMI routines
+;
+
+nmi		bit	$d40f
+		bpl	vbl
+dli		jmp	(dli_vec)
+
+vbl		cld
+		sta	$d40f
+		pha
+		txa
+		pha
+		tya
+		pha
+
+		inc	vbl_cnt
+
+		jsr	vbl_vec_jmp
+
+		lda	msx_frame_cnt
+		cmp	#<song_frames
+		lda	msx_frame_cnt+1
+		sbc	#>song_frames
+		bcs	skip_player
+
+		inw	msx_frame_cnt
+
+		jsr	play_frame_l		; play music
+		
+		lda	stereo_status
+		beq	*+5
+		jsr	play_frame_r
+
+skip_player
+
+; for debug/tuning
+		ift	TCR_DISPLAY
+		jsr	show_tcr
+		eif
+
+nmi_exit	pla
+		tay
+		pla
+		tax
+		pla
+rti_rti		rti
+rts_rts		rts
+
+vbl_vec_jmp	jmp	(vbl_vec)
+
+msx_frame_cnt	dta	a(0)
+
+logo_luma_idx	dta	$00
+lum_tab_a	dta	$00,$02,$04,$06,$08,$0a
+lum_tab_b	dta	$00,$06,$08,$0a,$0c,$0e
+
+ldr_col_tab	dta	$b4,$b8,$bf
+ldr_col_rem	dta	$00,$00,$00
+ldr_col_sub	dta	$40,$80,$ff
+
+; ------------------------------------------------------------------------------
+;
+; waits for vertical sync
+; 
+
+wait_vsync	lda	vbl_cnt
+		cmp	vbl_cnt
+		beq	*-2
+		rts
+; ------------------------------------------------------------------------------
+;
+; wait for given frame
+; 
+
+wait4frame	stx	?lo+1
+		sty	?hi+1
+
+?wait_loop	jsr	wait_vsync
+		lda	msx_frame_cnt+0
+?lo		cmp	#$ff
+		lda	msx_frame_cnt+1
+?hi		sbc	#$ff
+		bcc	?wait_loop
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; checks if given frame is passed
+; 
+; @return: C=1 frame is passed, C=0 frame not passed
+
+check4frame	stx	?lo+1
+		sty	?hi+1
+
+		lda	msx_frame_cnt+0
+?lo		cmp	#$ff
+		lda	msx_frame_cnt+1
+?hi		sbc	#$ff
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; loader logo fade-out
+;
+
+ldr_fade_out	lda	$14		; wait some time to show loading logo (if loading was to fast)
+		and	#$40
+		ora	$13
+		beq	ldr_fade_out
+
+		ldy	#$0f
+
+?fdo_lp0	lda	$14
+		cmp	$14
+		beq	*-2
+
+		ldx	#2
+?fdo_lp1	sec
+		lda	ldr_col_rem,x
+		sbc	ldr_col_sub,x
+		sta	ldr_col_rem,x
+		bcs	*+5
+		dec	ldr_col_tab,x
+
+		lda	ldr_col_tab,x
+		sta	$2c4,x
+
+		dex
+		bpl	?fdo_lp1
+		
+		dey
+		bpl	?fdo_lp0
+
+		rts
+
+
+; ------------------------------------------------------------------------------
+;	
+; main code starts here ;-)
+
+
+main		ift	LOADING_SCREEN
+		jsr	ldr_fade_out
+		eif
+
+		sei
+		inc	$d40e
+		lda	$d40b
+		bne	*-3
+		sta	$d400
+		sta	vbl_cnt
+
+		lda	#$fe
+		sta	$d301
+
+		mwa	#nmi $fffa
+
+		lda	#$03			; initialize both POKEY-s
+		sta	$d20f
+		sta	$d21f
+
+		jsr	init_lzss_dec		; initialize the music playback
+
+
+		ift	TCR_DISPLAY
+
+		lda	#>font_addr
+		sta	$d409
+		lda	#$b4
+		sta	$d016
+
+		eif
+
+		lda	#$00
+		sta	$d017
+		sta	$d018
+		sta	$d01a
+
+		lda	$d40b
+		bne	*-3
+		lsr	$d40e
+
+main_loop	jsr	stage_jump
+
+		inc	stage
+		jmp	main_loop
+
+stage_jump	lda	stage
+		asl	@
+		tax
+		lda	jmp_tbl+1,x
+		pha
+		lda	jmp_tbl+0,x
+		pha
+
+		lda	param_W,x
+		sta	?set_X+1
+		lda	param_W+1,x
+		sta	?set_Y+1
+
+		ldx	stage
+		lda	param_A,x
+		sta	?set_A+1
+		
+?set_A		lda	#0
+?set_X		ldx	#0
+?set_Y		ldy	#0
+		rts
+
+stage		dta	0
+
+jmp_tbl		dta	a(dedication-1)		; 0 - show dedication
+		dta	a(show_slt_logo-1)	; 1 - show slight logo
+		dta	a(bob_plotter-1)	; 2 - show bob plotter (set #0)
+		dta	a(show_rev_logo-1)	; 3 - show reveal logo
+		dta	a(bob_plotter-1)	; 4 - show bob plotter (set #1)
+		dta	a(show_rzg_logo-1)	; 5 - show reveal logo
+		dta	a(fountain-1)		; 6 - show fountain
+		dta	a(s_plazma-1)		; 7 - show s_plazma
+		dta	a(s_bars-1)		; 8 - show s_bars
+		dta	a(s_bobs-1)		; 9 - show shade bobs
+		dta	a(cred_code-1)		; 10
+		dta	a(show_sbn_logo-1)	; 11
+		dta	a(cred_msx-1)		; 12
+		dta	a(show_xry_logo-1)	; 13
+		dta	a(last_bobs-1)		; 14
+		dta	a(zderzak-1)		; n - ...
+
+param_A		dta	$00			; 0
+		dta	$00			; 1
+		dta	$15			; 2
+		dta	$00			; 3
+		dta	$16			; 4
+		dta	$00			; 5
+		dta	$00			; 6
+		dta	$00			; 7
+		dta	$16			; 8
+		dta	$00			; 9
+		dta	$00			; 10
+		dta	$00			; 11
+		dta	$00			; 12
+		dta	$00			; 13
+		dta	$19			; 14
+
+
+param_W		dta	a($0000)		; 0
+		dta	a($0000)		; 1
+		dta	a($0240)		; 2
+		dta	a($0000)		; 3
+		dta	a($03c0)		; 4
+		dta	a($0000)		; 5
+		dta	a($0000)		; 6
+		dta	a($0000)		; 7
+		dta	a($0000)		; 8
+		dta	a($0000)		; 9
+		dta	a($0000)		; 10
+		dta	a($0000)		; 11
+		dta	a($0000)		; 12
+		dta	a($0000)		; 13
+		dta	a($20a0)		; 14
+
+		icl	'gfx/gem_led.spr'
+		icl	'grtz_list.xsm'
+		icl	'depack_routines/zx7_decr.xsm'
+
+		icl	'logos_msgs.xsm'
+		icl	'fountain.xsm'
+		icl	'bob_plotter.xsm'
+		icl	'splazm.xsm'
+		icl	'sbars.xsm'
+		icl	'sbobs.xsm'
+
+zderzak		ldx	#$7f
+?clr		jsr	wait_vsync
+		dex
+		bpl	?clr
+
+		sei
+		inc	$d40e
+	
+		ldx	#$7f
+		ldy	#$00
+		lda	#$ff
+?wipe		sta	a:$0000,y
+		iny
+		bne	?wipe
+		inc	?wipe+2
+		dex
+		bpl	?wipe
+
+		stx	$d301
+		clv
+		bvc	*
+
+led_gem_on	sta	gem_x_pos+1
+		sty	led_gem_era?y_pos+1	; save Y position of LED-GEM in erase procedure!
+		tya
+		pha
+
+?pmg_mod1	ldx	#$00
+		lda	#$00
+?pmg_c0		sta	pmg_base+$300,x
+		sta	pmg_base+$400,x
+		sta	pmg_base+$500,x
+		sta	pmg_base+$600,x
+		sta	pmg_base+$700,x
+
+		cpx	#$0e
+		bcs	*+5
+		sta	$d000,x			; clear sprite positions
+
+		dex
+?pmg_mod2	bne	?pmg_c0
+
+		lda	#>pmg_base		; setup PMG base address
+		sta	$d407
+			
+		lda	#$21			; enable multi-color sprites
+		sta	$d01b
+	
+		lda	#$03			; enable sprites in GTIA
+		sta	$d01d
+
+		lda	#$24
+		sta	$d012
+		sta	$d014
+		lda	#$28
+		sta	$d013
+		sta	$d015
+
+		jsr	wait_vsync
+
+		ldx	#0
+		pla
+		tay
+?cpl		lda	gem_plr0,x
+		sta	pmg_base+$400,y
+		lda	gem_plr1,x
+		sta	pmg_base+$500,y
+		lda	gem_plr2,x
+		sta	pmg_base+$600,y
+		lda	gem_plr3,x
+		sta	pmg_base+$700,y
+		iny
+		inx
+		cpx	#$09
+		bcc	?cpl
+	
+		rts
+
+set_gem_lum	dec	hb_rate
+		bne	?gem_ext
+?set_hb_rate	lda	#12
+		sta	hb_rate
+
+?gem_lum_idx	ldx	#$03
+		lda	gem_lut_a,x
+?gem_col_a	ora	#$20
+		sta	$d012
+		sta	$d014
+		lda	gem_lut_b,x
+?gem_col_b	ora	#$20
+		sta	$d013
+		sta	$d015
+		
+		dex
+		txa
+		and	#$03
+?stop_hbt	sta	?gem_lum_idx+1
+				
+?gem_ext	rts
+
+hb_rate		dta	12
+
+led_gem_off	ldx	#$15
+		lda	#$00
+?clr		sta	$d000,x
+		dex
+		bpl	?clr
+		sta	$d01b
+		sta	$d01d
+		sta	gem_x_pos+1
+		rts
+
+led_gem_era	php
+?y_pos		ldy	#$00
+		ldx	#15
+		lda	#$00
+
+?erl		sta	pmg_base+$400,y
+		sta	pmg_base+$500,y
+		sta	pmg_base+$600,y
+		sta	pmg_base+$700,y
+		iny
+		dex
+		bpl	?erl
+		plp
+		rts
+
+gem_led_vbl	; gem-led vbl helper (interlace position setter)
+
+gem_x_pos	lda	#$00
+		ldy	#$00
+		bcc	?no_swp
+		tay
+		lda	#$00
+?no_swp		sta	$d000
+		sta	$d001
+		sty	$d002
+		sty	$d003
+		rts
+
+gem_lut_a	dta	$02,$02,$04,$06
+gem_lut_b	dta	$04,$08,$08,$08
+
+
+		run	main

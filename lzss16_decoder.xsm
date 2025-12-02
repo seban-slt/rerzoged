@@ -1,0 +1,427 @@
+;
+; LZSS Compressed SAP player for 16 match bits
+; --------------------------------------------
+;
+; (c) 2020 DMSC
+; Code under MIT license, see LICENSE file.
+;
+; This player uses:
+;  Match length: 8 bits  (1 to 256)
+;  Match offset: 8 bits  (1 to 256)
+;  Min length: 2
+;  Total match bits: 16 bits
+;
+; Compress using:
+;  lzss -b 16 -o 8 -m 1 input.rsap test.lz16
+;
+; Assemble this file with MADS assembler, the compressed song is expected in
+; the `test.lz16` file at assembly time.
+;
+; The plater needs 256 bytes of buffer for each pokey register stored, for a
+; full SAP file this is 2304 bytes.
+
+DEC_ZP_CODE	equ	0
+
+
+POKEY_L		equ	$d200
+POKEY_R		equ	$d210
+
+LEFT_ENABLED	equ	1
+RIGHT_ENABLED	equ	1
+
+lz_buffers	equ	lzss_buffers
+
+buffers_l       equ     [lz_buffers]
+buffers_r       equ     [buffers_l+256*9]
+
+		ift	DEC_ZP_CODE
+		org	$80
+		els
+		org	$c0
+		eif
+
+chn_copy_l	org	*+9
+chn_pos_l	org	*+9
+bptr_l		org	*+2
+cur_pos_l	org	*+1
+chn_bits_l	org	*+1
+
+chn_copy_r	org	*+9
+chn_pos_r	org	*+9
+bptr_r		org	*+2
+cur_pos_r	org	*+1
+chn_bits_r	org	*+1
+
+bit_data_l	org	*+1
+bit_data_r	org	*+1
+
+		ert	*>$f0
+
+zp_code_loc	equ	*
+
+		org	lzss_decoder_origin
+
+		ift	DEC_ZP_CODE
+
+zp_code_loaded		
+		org	r:zp_code_loc
+zp_code_start
+
+		ift	LEFT_ENABLED
+
+; left channel get byte
+
+song_ptr_l	equ	get_ptr_l+1
+
+get_byte_l	lda	$d301
+		sta	rest_bank_l+1
+
+set_bank_l	lda	#$00
+		sta	$d301
+
+get_ptr_l	lda	song_data_l
+		pha
+
+rest_bank_l	lda	#$00
+		sta	$d301
+
+		inc	z:song_ptr_l
+		bne	?get_exl
+		inc	z:song_ptr_l+1
+
+?get_exl	pla
+		rts
+
+		eif
+
+		ift	RIGHT_ENABLED
+
+; right channel get byte
+
+song_ptr_r	equ	get_ptr_r+1
+
+get_byte_r	lda	$d301
+		sta	rest_bank_r+1	
+
+set_bank_r	lda	#$00
+		sta	$d301
+
+get_ptr_r	lda	song_data_r
+		pha
+
+rest_bank_r	lda	#$fe
+		sta	$d301
+
+		inc	z:song_ptr_r
+		bne	get_exl_r
+		inc	z:song_ptr_r+1
+
+get_exl_r	pla
+		rts
+
+		eif
+
+zp_code_len	equ	*-zp_code_start
+
+		ert	zp_code_len==0		; no ZP code generated
+		ert	zp_code_len>=128	; detect overflow
+
+		; restore proper origin
+		org	*-zp_code_start+zp_code_loaded
+
+		eif				; end if for DEC_ZP_CODE
+
+		ift	!DEC_ZP_CODE
+
+		ift	LEFT_ENABLED
+
+; left channel get byte
+
+song_ptr_l	equ	get_ptr_l+1
+
+get_byte_l	lda	$d301
+		sta	rest_bank_l+1
+
+set_bank_l	lda	#$00
+		sta	$d301
+
+get_ptr_l	lda	song_data_l
+		pha
+
+rest_bank_l	lda	#$00
+		sta	$d301
+
+		inc	song_ptr_l
+		bne	?get_exl
+		inc	song_ptr_l+1
+
+?get_exl	pla
+		rts
+
+		eif
+
+		ift	RIGHT_ENABLED
+
+; right channel get byte
+
+song_ptr_r	equ	get_ptr_r+1
+
+get_byte_r	lda	$d301
+		sta	rest_bank_r+1	
+
+set_bank_r	lda	#$00
+		sta	$d301
+
+get_ptr_r	lda	song_data_r
+		pha
+
+rest_bank_r	lda	#$00
+		sta	$d301
+
+		inc	song_ptr_r
+		bne	get_exl_r
+		inc	song_ptr_r+1
+
+get_exl_r	pla
+		rts
+
+		eif
+		
+		eif
+
+
+; -----------------------------------------------------------------------------
+;
+; call this to initialize the LZSS decoder
+;
+
+init_lzss_dec	ift	DEC_ZP_CODE
+
+		ldx	#zp_code_len-1
+idec_cp		lda	zp_code_loaded,x
+		sta	zp_code_start,x
+		dex
+		bpl	idec_cp
+
+		eif
+
+		ift	RIGHT_ENABLED
+
+		lda	stereo_status
+		beq	*+5
+		jsr	init_song_r
+
+		eif
+
+		ift	LEFT_ENABLED
+;		jmp	init_song_l		; <--- not needed when init_song_l is directly below!
+		eif
+
+; LEFT channel Song Initialization - this runs in the first tick:
+
+		ift	LEFT_ENABLED
+
+init_song_l	mwa	#song_data_l song_ptr_l
+		lda	[banks+0]
+		sta	set_bank_l+1
+
+		lda	#>[buffers_l+255]
+		sta	?cbuf+2
+
+		lda	#1
+		sta	bit_data_l
+
+; 1st byte in stream is enabled channels mask
+
+		jsr	get_byte_l
+		sta	chn_ena_l+1
+
+	; Init all channels:
+	
+		ldx	#8
+		ldy	#0
+
+	; Read just init value and store into buffer and POKEY
+?clear		jsr	get_byte_l
+		sta	POKEY_L,x
+		sty	chn_copy_l,x
+?cbuf		sta 	buffers_l+255
+		inc 	?cbuf+2
+		dex
+		bpl 	?clear
+
+	; Initialize buffer pointer:
+		sty	bptr_l
+		sty	cur_pos_l
+
+		rts
+; -----------------------------------------------------------------------------
+; Play one frame of the song
+;
+play_frame_l	lda	#>buffers_l
+		sta	bptr_l+1
+
+chn_ena_l	lda	#0
+		sta	chn_bits_l
+		
+		ldx	#8
+
+; Loop through all "channels", one for each POKEY register
+
+?chn_loop_l	lsr	chn_bits_l
+		bcs	?skip_chn	; C=1 : skip this channel
+
+		lda	chn_copy_l,x	; Get status of this stream
+		bne	?do_copy_byte	; If > 0 we are copying bytes
+
+; We are decoding a new match/literal
+
+		lsr	bit_data_l	; Get next bit
+		bne	?got_bit
+		jsr	get_byte_l	; Not enough bits, refill!
+		ror    	@		; Extract a new bit and add a 1 at the high bit (from C set above)
+		sta	bit_data_l	;
+
+?got_bit	jsr	get_byte_l	; Always read a byte, it could mean "match size/offset" or "literal byte"
+		bcs 	?store		; Bit = 1 is "literal", bit = 0 is "match"
+
+		sta 	chn_pos_l,x     ; Store in "copy pos"
+
+		jsr	get_byte_l
+		sta	chn_copy_l,x    ; Store in "copy length"
+
+; And start copying first byte
+
+?do_copy_byte	dec	chn_copy_l,x     ; Decrease match length, increase match position
+		inc	chn_pos_l,x
+		ldy	chn_pos_l,x
+
+; Now, read old data, jump to data store
+		lda	(bptr_l),y
+
+?store		ldy	cur_pos_l
+		sta	POKEY_L,x        ; Store to output and buffer
+		
+		sta	l_pokey_shadow,x ; store copy for EQ
+		
+		sta	(bptr_l),y
+
+?skip_chn	inc	bptr_l+1	; Increment channel buffer pointer
+
+		dex
+		bpl	?chn_loop_l        ; Next channel
+
+		inc	cur_pos_l
+
+		rts
+
+		eif
+
+
+; -----------------------------------------------------------------------------
+; Song Initialization - this runs in the first tick:
+;
+
+		ift	RIGHT_ENABLED
+
+init_song_r	mwa	#song_data_r song_ptr_r
+		lda	[banks+0]
+		sta	set_bank_r+1
+
+		lda	#1
+		sta	bit_data_r
+
+		lda	#>[buffers_r+255]
+		sta	?cbuf+2
+		
+; 1st byte in stream is enabled channels mask
+
+		jsr	get_byte_r
+		sta	chn_ena_r+1
+
+	; Init all channels:
+	
+		ldx	#8
+		ldy	#0
+
+	; Read just init value and store into buffer and POKEY
+?clear		jsr	get_byte_r
+		sta	POKEY_R,x
+		sty	chn_copy_r,x
+?cbuf		sta 	buffers_r+255
+		inc 	?cbuf+2
+		dex
+		bpl 	?clear
+
+	; Initialize buffer pointer:
+		sty	bptr_r
+		sty	cur_pos_r
+
+		rts
+
+; -----------------------------------------------------------------------------
+;
+; Play one frame of the song
+;
+
+play_frame_r	lda	#>buffers_r
+		sta	bptr_r+1
+
+chn_ena_r	lda	#0
+		sta	chn_bits_r
+		
+		ldx	#8
+
+; Loop through all "channels", one for each POKEY register
+
+?chn_loop_r	lsr	chn_bits_r
+		bcs	?skip_chn	; C=1 : skip this channel
+
+		lda	chn_copy_r,x	; Get status of this stream
+		bne	?do_copy_byte	; If > 0 we are copying bytes
+
+; We are decoding a new match/literal
+
+		lsr	bit_data_r	; Get next bit
+		bne	?got_bit
+		jsr	get_byte_r	; Not enough bits, refill!
+		ror    	@		; Extract a new bit and add a 1 at the high bit (from C set above)
+		sta	bit_data_r	;
+
+?got_bit	jsr	get_byte_r	; Always read a byte, it could mean "match size/offset" or "literal byte"
+		bcs 	?store		; Bit = 1 is "literal", bit = 0 is "match"
+
+		sta 	chn_pos_r,x     ; Store in "copy pos"
+
+		jsr	get_byte_r
+		sta	chn_copy_r,x    ; Store in "copy length"
+
+; And start copying first byte
+
+?do_copy_byte	dec	chn_copy_r,x     ; Decrease match length, increase match position
+		inc	chn_pos_r,x
+		ldy	chn_pos_r,x
+
+; Now, read old data, jump to data store
+		lda	(bptr_r),y
+
+?store		ldy	cur_pos_r
+		sta	POKEY_R,x        ; Store to output and buffer
+		
+		sta	r_pokey_shadow,x ; store copy for EQ
+
+		sta	(bptr_r),y
+
+?skip_chn	inc	bptr_r+1		; Increment channel buffer pointer
+
+		dex
+		bpl	?chn_loop_r        ; Next channel
+
+		inc	cur_pos_r
+
+		rts
+
+l_pokey_shadow	org	*+$10
+r_pokey_shadow	org	*+$10
+
+		eif

@@ -1,0 +1,164 @@
+ZX7_STANDALONE	equ	0
+
+		ift	ZX7_STANDALONE
+
+		opt	h+
+		run	main
+		org	$2000
+
+pic_a		ins	'loading3.bp0.zx7'	; include LZ4 data for PIC_A (skip 11 byte header)
+pic_b		ins	'loading3.bp1.zx7'	; include LZ4 data for PIC_B (skip 11 byte header)
+
+main		lda	#$00
+		sta	$14
+		sta	$13
+
+		lda	#$a0
+		ldx	<pic_a
+		ldy	>pic_a
+		jsr	unpack_frame
+		lda	#$c0
+		ldx	<pic_b
+		ldy	>pic_b
+		jsr	unpack_frame
+
+		inc	$d40e
+		ldx	$13
+		ldy	$14
+		lsr	$d40e
+
+		stx	$3c0
+		sty	$3c1
+
+?int_lace	lda	$14
+		lsr	@
+
+		ldx	#$36
+		ldy	#$a0
+		bcc	*+6
+		ldx	#$36
+		ldy	#$80
+
+		stx	$230
+		sty	$231
+		
+		jmp	?int_lace
+
+; ------------------------------------------------------------------------------
+;
+; unpacks given LZ4 data
+;
+; A - RAMTOP
+; X,Y address of packed data
+
+unpack_frame	sta	$6a
+		tya
+		pha
+		txa
+		pha
+
+		jsr	set_gfx_mode
+
+		ldx	$58
+		ldy	$59
+		jsr	un_zx7_set_dst
+
+		pla
+		tax
+		pla
+		tay
+		jmp	un_zx7
+
+set_gfx_mode	lda	#15		; graphics 15
+		jsr	$ef90
+
+		lda	#$b4
+		ldx	#$b8
+		ldy	#$bc
+		sta	$2c4
+		stx	$2c5
+		sty	$2c6
+		rts
+
+		eif
+
+; ------------------------------------------------------------------------------
+;
+; sets address of decompressed data
+;
+
+un_zx7_set_dst	stx	un_zx7?put_byte+1
+		sty	un_zx7?put_byte+2
+		rts
+
+un_zx7_set_bnk	sta	un_zx7?get_byte+1
+		rts
+
+; ------------------------------------------------------------------------------
+;
+; depack ZX7 data
+;
+; based od decompression routine by XXL
+; ( https://xxl.atari.pl/zx7-decompressor/ )
+;
+
+un_zx7		stx	?src_ptr+1
+		sty	?src_ptr+2
+
+		lda	#$80
+		sta	?token
+?copyby		jsr	?get_byte
+		jsr	?put_byte
+?mainlo		jsr	?getbits
+		bcc	?copyby
+		
+		lda	#$01
+		sta	?lenL
+?lenval		jsr	?getbits
+		rol	?lenL
+		bcs	?_ret			; koniec
+		
+		jsr	?getbits
+		bcc	?lenval
+		
+		jsr	?get_byte
+		sta	?offsL+1
+		lda	?put_byte+1		; ZX7_OUTPUT
+		clc				; C=0
+?offsL		sbc	#$ff
+		sta	?copysrc+1
+		lda	?put_byte+2		; ZX7_OUTPUT+1
+		sbc	#$00
+		sta	?copysrc+2
+
+?copysrc	lda	$ffff
+		inw	?copysrc+1
+		jsr	?put_byte
+		dec	?lenL
+		bne	?copysrc
+		
+		jmp	?mainlo
+
+?getbits	asl	?token			; bez c
+		bne	?_ret
+		jsr	?get_byte
+		rol	@			; c
+		sta	?token
+?_ret		rts
+
+?get_byte	lda	#$fe
+		sta	$d301
+?src_ptr	lda	$ffff
+		inw	?src_ptr+1
+		pha
+?ret_bnk	lda	#$fe
+		sta	$d301
+		pla
+		rts
+
+?put_byte	sta	$ffff
+		inw	?put_byte+1
+		rts
+
+?token		dta	$00
+?lenL		dta	$00

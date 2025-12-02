@@ -1,0 +1,39 @@
+Title: "RERZÓGED"
+Category: Atari XL/XE Demo – Standard Compo
+
+File name: rzerzoged.xex
+File size: 58778 bytes
+
+Requirements:
+ - standard Atari XL/XE with 128 kB of RAM (stock 130XE, 4 banks)
+ - PAL system
+ - stereo POKEY highly recommended!
+
+Authors:
+ - code : Seban / Slight
+ - gfx  : X-Ray / Slight
+ - music: "Half a Little" by X-Ray / Slight
+
+Version:
+ - final release: v1.1
+
+Technical info:
+ - music created with Theta Music Composer v1.1
+ - project compiled with XASM
+ - VS Code used as editor (+XASM syntax highlighting extension)
+ - developed with help of Altirra and Atari800 emulators
+ - most graphics use interlaced modes (7 colors / GR.15, 31 shades / GR.9)
+ - CRT strongly recommended for correct visuals
+
+Trivia:
+- inspired by the work of RZóG/Slight and created as a thank-you for our shared journey since the '90s
+- a tiny intro idea that became something much bigger
+- total code size is under 16 KB
+- additional memory banks used for music and graphics data
+- soundtrack included in SAP and TMC/TM8 formats
+
+Source code:
+ https://github.com/seban-slt/rerzoged
+
+Video:
+ https://youtu.be/1Rn6uxw2jEg

@@ -2,7 +2,7 @@
 
 ## Info (Polski/Polish)
 
-[English version below](#info-englishangielski)
+[English version below](#info-english)
 
 To repozytorium zawiera kod źródłowy dema **„ReRZóGeD”** zaprezentowanego na Silly Venture 2025 Winter Edition.
 
@@ -39,7 +39,7 @@ I oczywiście - ogromne podziękowania dla [RZóG-a](https://github.com/RZoG). B
 
 ---
 
-## Info (English/Angielski)
+## Info (English)
 
 This repository contains the source code of the demo "ReRZóGeD", presented at Silly Venture 2025 Winter Edition.
 

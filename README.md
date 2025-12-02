@@ -2,7 +2,7 @@
 
 ## Info (Polski/Polish)
 
-[English version below](#info-english)
+[English version below](#info-english-angielski)
 
 To repozytorium zawiera kod źródłowy dema **„ReRZóGeD”** zaprezentowanego na Silly Venture 2025 Winter Edition.
 

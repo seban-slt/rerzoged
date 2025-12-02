@@ -1,1 +1,3 @@
-*.xsm linguist-language=XASM
+*.xsm linguist-language=Assembly
+*.icl linguist-language=Assembly
+*.asm linguist-language=Assembly

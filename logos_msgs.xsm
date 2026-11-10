@@ -922,7 +922,7 @@ show_xry_logo	jsr	prep_xry_logo
 		ldy	#>$1fe0
 		jsr	wait4frame
 
-		lda	#$40
+		lda	#$70			; blue hue for X-Ray
 		clc				; slower fade in
 		jsr	logo_fade_in
 

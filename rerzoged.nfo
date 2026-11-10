@@ -1,8 +1,8 @@
 Title: "RERZÓGED"
 Category: Atari XL/XE Demo – Standard Compo
 
-File name: rzerzoged.xex
-File size: 58778 bytes
+File name: rerzoged.xex
+File size: 58789 bytes
 
 Requirements:
  - standard Atari XL/XE with 128 kB of RAM (stock 130XE, 4 banks)
@@ -15,7 +15,7 @@ Authors:
  - music: "Half a Little" by X-Ray / Slight
 
 Version:
- - final release: v1.1
+ - final release: v1.2
 
 Technical info:
  - music created with Theta Music Composer v1.1

@@ -4,6 +4,11 @@ ZUKS_XMS_BANK	equ	[banks+1]
 ZUK_PIC_LINES	equ	150
 FADE_OUT_TIME	equ	$2c
 
+; First notes arrive at $179f. Allow two VBLs for LED setup and the
+; initial black fade step, while retaining the original fade-out frame.
+SBS_FIRST_START	equ	[$17a0-3]
+SBS_FIRST_END	equ	[$17a0+$180-50]
+
 ; memory map
 
 zuks_dst	equ	$1000
@@ -859,23 +864,20 @@ s_bobs		jsr	wait_vsync
 		lda	#32
 		sta	sbobs_count
 
-		ldx	#<$17a0
-		ldy	#>$17a0
+		jsr	sbobs_prepare		; copy the first beetle before the sync
+		php				; keep beetle selection for the LED
+		ldx	#<SBS_FIRST_START
+		ldy	#>SBS_FIRST_START
 		jsr	wait4frame
 
-		mwa	#[$180-50] sbobs_tmr
+		mwa	#[SBS_FIRST_END-SBS_FIRST_START] sbobs_tmr
+		plp
+		jmp	bob_start
 
 
-bob_rest	jsr	sbob_ld_e
-		jsr	sbob_par_cpy
+bob_rest	jsr	sbobs_prepare
 
-?zuk_sel	lda	#$01
-		eor	#$01
-		sta	?zuk_sel+1
-		lsr	@
-		jsr	copy_beetle
-
-		lda	#$8d			; restore heart-beat
+bob_start	lda	#$8d			; restore heart-beat
 		sta	set_gem_lum?stop_hbt
 
 		lda	#12			; restore heart beat rate!
@@ -928,6 +930,18 @@ fade_loop	jsr	wait_vsync
 		mwa	#rts_rts vbl_vec
 		mwa	#rti_rti dli_vec
 		rts
+
+; Load a preset and copy both beetle bitplanes. Return its selection in C.
+; The first preset is prepared before waiting; later ones follow the fade.
+
+sbobs_prepare	jsr	sbob_ld_e
+		jsr	sbob_par_cpy
+
+?zuk_sel	lda	#$01
+		eor	#$01
+		sta	?zuk_sel+1
+		lsr	@
+		jmp	copy_beetle
 
 zuk_col_tab	dta	$04,$08,$0f
 zuk_col_rem	dta	$00,$00,$00

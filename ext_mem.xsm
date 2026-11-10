@@ -7,7 +7,7 @@
 banks		equ	$180
 
 		org	$bfd3
-		dta	d'v1.1'
+		dta	d'v1.2'
 
 ; detect & check XMS (we need 4 extra banks)
 

@@ -144,6 +144,7 @@ lut_d		dta	$11,$22,$33,$44,$55,$66,$77,$88,$99,$aa,$bb,$cc,$dd,$ee,$ff
 		dta	$ee,$dd,$cc,$bb,$aa,$99,$88,$77,$66,$55,$44,$33,$22,$11,$00
 
 ; sprite masking LUT's - nibble packed!
+; high/low nibble: upper/lower HPOS; opposite curtain reverses rows and swaps nibbles.
 
 hid_plr0_ulbl	dta	$3B,$3B,$3B,$3B,$3B,$3B,$3B,$3B,$3B,$3B,$2C,$00
 hid_plr1_ulbl 	dta	$59,$59,$59,$59,$59,$59,$59,$59,$4A,$00,$00,$00
@@ -152,8 +153,8 @@ hid_plr3_ulbl 	dta	$95,$95,$95,$95,$86,$00,$00,$00,$00,$00,$00,$00
 hid_plr4_ulbl 	dta	$B3,$B3,$A4,$00,$00,$00,$00,$00,$00,$00,$00,$00
 
 hid_plr0_urbr	dta	$3B,$3B,$4A,$00,$00,$00,$00,$00,$00,$00,$00,$00
-hid_plr1_urbr	dta	$59,$59,$59,$59,$59,$68,$00,$00,$00,$00,$00,$00
-hid_plr2_urbr	dta	$77,$77,$77,$77,$77,$77,$68,$00,$00,$00,$00,$00
+hid_plr1_urbr	dta	$59,$59,$59,$59,$68,$00,$00,$00,$00,$00,$00,$00
+hid_plr2_urbr	dta	$77,$77,$77,$77,$77,$77,$86,$00,$00,$00,$00,$00
 hid_plr3_urbr	dta	$95,$95,$95,$95,$95,$95,$95,$95,$A4,$00,$00,$00
 hid_plr4_urbr	dta	$B3,$B3,$B3,$B3,$B3,$B3,$B3,$B3,$B3,$B3,$C2,$00
 
